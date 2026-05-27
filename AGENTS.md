@@ -13,3 +13,5 @@ Guidelines:
 
 Knowledge lookup:
 There's a folder `knowledge` that contains documentation and cloned repos of dependendent projects.
+
+ALWAYS run `nix fmt` before committing.

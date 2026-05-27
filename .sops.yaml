@@ -1,0 +1,39 @@
+# SOPS encryption config using SSH Ed25519 public keys.
+# sops/age encrypts to SSH public keys and decrypts with the corresponding private key.
+#
+# Adding a trusted machine:
+#   1. Get its SSH host public key: ssh-keyscan <host> | grep ed25519
+#   2. Add it as a YAML anchor below
+#   3. Reference it in the relevant creation rule's key_groups
+#   4. Run: sops updatekeys secrets/<profile>.enc.json
+#
+# Decryption works automatically when run from a terminal — sops prompts for
+# your SSH key passphrase. For non-interactive use, create an age identity:
+#   ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o ~/.config/sops/age/keys.txt
+
+keys:
+  # Personal keys (from github.com/kasuboski.keys)
+  - &personal-josh ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJzR7zD/n14hIPjRWN8lGIj2zSmmFaqBX2Qhf80TOmdQ
+  - &personal-key2 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJE8z2Yte2PSMwWQ5KLBTfoEGtdoYx2Ms9Mhpahz7Dc4
+  - &personal-key3 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFTtz1cMBz2ckdpx2mMr1etZvj6LwGYrpNREGsbCvnC5
+
+  # Add trusted machines here:
+  # - &work-machine ssh-ed25519 AAAA...
+
+creation_rules:
+  # Personal profile secrets
+  - path_regex: ^secrets/personal\.enc\.json$
+    key_groups:
+      - age:
+          - *personal-josh
+          - *personal-key2
+          - *personal-key3
+
+  # Work profile secrets — add work machine keys here
+  - path_regex: ^secrets/work\.enc\.json$
+    key_groups:
+      - age:
+          - *personal-josh
+          - *personal-key2
+          - *personal-key3
+          # - *work-machine
