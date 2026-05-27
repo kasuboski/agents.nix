@@ -1,6 +1,6 @@
 # agents.nix
 
-Personal AI coding agent wrappers. Takes agents from [llm-agents.nix](https://github.com/numtide/llm-agents.nix) and wraps them with secrets from [sops](https://github.com/getsops/sops) and optional sandboxing via [microsandbox](https://github.com/superradcompany/microsandbox).
+Personal AI coding agent wrappers. Takes agents from [llm-agents.nix](https://github.com/numtide/llm-agents.nix) and wraps them with secrets from [sops](https://github.com/getsops/sops) and optional sandboxing via [microsandbox](https://github.com/superradcompany/microsandbox). Extensions and skills come from [pi-extensions](https://github.com/kasuboski/pi-extensions).
 
 ## How it works
 
@@ -14,13 +14,27 @@ Each package is a thin wrapper script that:
 
 ### Profiles
 
-Secrets are organized into profiles — separate encrypted files for different contexts (personal, work). Each profile produces its own set of packages:
+Secrets are organized into profiles — separate encrypted files for different contexts (personal, work). Each profile produces its own set of packages.
 
-```
-pi                # personal (default)
-pi-work           # work profile
-pi-boxed          # personal in microsandbox
-pi-work-boxed     # work in microsandbox
+### Extensions vs no extensions
+
+Extensions loaded via `-e` flags conflict with user-installed copies in `~/.pi/agent/`. To avoid this, native packages come in two variants:
+
+| Variant | Secrets | Extensions | Skills | Use when |
+|---|---|---|---|---|
+| `pi` / `pi-work` | ✅ | ❌ | ❌ | You have extensions installed locally already |
+| `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | You want everything from nix, no local setup |
+| `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | Always — no conflict inside a VM |
+
+```bash
+# Secrets only — won't conflict with your installed extensions
+nix run .#pi
+
+# Secrets + extensions + skills from nix
+nix run .#pi-ext
+
+# Fully sandboxed (always includes extensions)
+nix run .#pi-boxed
 ```
 
 ### Encryption
@@ -35,8 +49,9 @@ nix develop
 sops secrets/personal.enc.json
 
 # Run (sops will prompt for your SSH key passphrase)
-nix run .#pi
-nix run .#pi-boxed  # requires Linux or Apple Silicon
+nix run .#pi          # secrets only
+nix run .#pi-ext      # secrets + extensions + skills
+nix run .#pi-boxed    # sandboxed (requires Linux or Apple Silicon)
 ```
 
 ### Set up non-interactive decryption
@@ -52,7 +67,17 @@ nix shell nixpkgs#ssh-to-age -c ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o 
 | Package | x86_64-linux | aarch64-linux | aarch64-darwin | x86_64-darwin |
 |---|---|---|---|---|
 | `pi` / `pi-work` | ✅ | ✅ | ✅ | ✅ |
+| `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | ✅ |
 | `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | ❌ |
+
+## Extensions & Skills
+
+Loaded from [kasuboski/pi-extensions](https://github.com/kasuboski/pi-extensions):
+
+**Extensions** (3): status-tracker, subagent, tinyfish (with `@tiny-fish/sdk` + transitive deps)
+**Skills** (5): agent-browser, deepwiki, develop-testing-strategy, github-actions, grugbrain
+
+Extensions are built with `buildNpmPackage`, which patches the upstream lockfile to add missing integrity hashes for 3 peer dependency entries. Transitive npm dependencies (e.g. `p-retry` inside `@tiny-fish/sdk`) are fully resolved.
 
 ## Operations
 
@@ -101,7 +126,7 @@ sops updatekeys secrets/work.enc.json
 1. Create a plaintext JSON file with the secret keys:
 
 ```bash
-echo '{"GITHUB_TOKEN": "...", "TINYFISH_API_KEY": "...", "Z_API_KEY": "..."}' > secrets/newprofile.json
+echo '{"GITHUB_TOKEN": "...", "TINYFISH_API_KEY": "...", "ZAI_API_KEY": "..."}' > secrets/newprofile.json
 ```
 
 2. Encrypt it:
@@ -126,6 +151,20 @@ profiles = {
 ```
 
 5. Rebuild: `nix build .#pi-newprofile`
+
+### Update extension npm dependency hashes
+
+When pi-extensions adds or changes npm dependencies:
+
+1. Set the hash to `""` in `packages/build-pi-extensions.nix` for the affected extension
+2. Build and copy the `got:` value from the error:
+
+```bash
+nix build .#pi-ext --accept-flake-config
+# error: hash mismatch ... got: sha256-XXXXX
+```
+
+3. Paste the correct hash back into `npmDepsHashes`
 
 ### Add a new agent
 

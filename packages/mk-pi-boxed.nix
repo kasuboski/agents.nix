@@ -2,14 +2,8 @@
 # with unexploitable secrets (TLS proxy substitutes placeholders).
 #
 # Approach: copies the aarch64-linux nix closure to a temp dir at runtime,
-# then mounts it into an ubuntu VM at /nix/store. Nix binaries use absolute
-# /nix/store paths for everything (shebangs, rpaths, dylibs) so they work
-# unmodified inside the VM.
-#
-# The copy is needed because:
-# - microsandbox on macOS can't mount /nix/store directly (HVF permission denied)
-# - The nix-built closure has root-owned read-only files that msb can't read
-# - A user-owned temp copy solves both issues
+# then mounts it into an ubuntu VM at /nix/store. Extensions and skills are
+# included in the closure and loaded via -e/--skill flags.
 #
 # Arguments:
 #   pkgs          - nixpkgs set (native system, e.g. aarch64-darwin)
@@ -19,6 +13,8 @@
 #   closure       - path to the nix closure directory (from mk-pi-rootfs)
 #   sops-file     - path to the encrypted secrets file
 #   profile       - optional profile name suffix
+#   extensions    - optional attrset of extension name → nix store path (linux)
+#   skills        - optional attrset of skill name → nix store path (linux)
 {
   pkgs,
   llm-agents-pi,
@@ -27,6 +23,8 @@
   closure,
   sops-file,
   profile ? null,
+  extensions ? { },
+  skills ? { },
 }:
 
 let
@@ -34,8 +32,6 @@ let
   lib = pkgs.lib;
 
   # Maps secret env var names to the API host they're allowed to be sent to.
-  # The VM sees a placeholder ($MSB_<KEY>) and the TLS proxy only injects
-  # the real value when the request goes to the matching host.
   secretHosts = {
     GITHUB_TOKEN = "github.com";
     TINYFISH_API_KEY = "agent.tinyfish.ai";
@@ -49,6 +45,16 @@ let
       MSB_SECRET_ARGS+=(--secret "${key}=$val@${host}")
     fi
   '';
+
+  # Build -e <path> flags for each extension (using linux paths)
+  extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (
+    lib.attrValues extensions
+  );
+
+  # Build --skill <path> flags for each skill
+  skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (
+    lib.attrValues skills
+  );
 in
 pkgs.writeShellApplication {
   inherit name;
@@ -72,9 +78,6 @@ pkgs.writeShellApplication {
     fi
 
     # Build --secret flags for microsandbox.
-    # Format: --secret "KEY=value@api.host.com"
-    # The VM sees a placeholder $MSB_KEY; the TLS proxy substitutes
-    # the real value only for requests matching the host.
     MSB_SECRET_ARGS=()
 
     ${lib.concatStringsSep "\n    " (lib.mapAttrsToList mkSecretFlag secretHosts)}
@@ -90,11 +93,11 @@ pkgs.writeShellApplication {
 
     # Run pi inside a microsandbox ubuntu VM.
     # Mount the nix closure at /nix/store so pi finds its dependencies.
-    # Nix binaries use absolute /nix/store paths, so no FHS setup needed.
+    # Extensions and skills are loaded via flags pointing at /nix/store paths.
     exec msb run ubuntu \
       --volume "$NIX_CLOSURE:/nix/store" \
       "''${MSB_SECRET_ARGS[@]}" \
-      -- ${llm-agents-pi-linux}/bin/pi "$@"
+      -- ${llm-agents-pi-linux}/bin/pi ${extensionFlags} ${skillFlags} "$@"
   '';
 
   meta = {

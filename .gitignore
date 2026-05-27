@@ -2,7 +2,7 @@ knowledge/repos/
 STATUS.md
 
 # Nix build symlinks
-result
+result*
 
 # Decrypted secrets (never commit)
 secrets/*.json

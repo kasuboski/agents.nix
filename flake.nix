@@ -25,6 +25,12 @@
       url = "github:kasuboski/microsandbox-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Personal pi extensions and skills
+    pi-extensions = {
+      url = "github:kasuboski/pi-extensions";
+      flake = false;
+    };
   };
 
   outputs =
@@ -34,6 +40,7 @@
       systems,
       llm-agents,
       microsandbox-flake,
+      pi-extensions,
     }:
     let
       # ── Platform matrix ───────────────────────────────────────────────
@@ -47,28 +54,34 @@
       ];
 
       # The Linux architecture microsandbox VMs run on each host
-      # aarch64-darwin (Apple Silicon) → aarch64-linux VM
-      # x86_64-linux → x86_64-linux VM
-      # aarch64-linux → aarch64-linux VM
       linuxSystem = system: if system == "aarch64-darwin" then "aarch64-linux" else system;
 
       forEachSystem = systemList: fn: nixpkgs.lib.genAttrs systemList (system: fn system);
 
       # ── Profile definitions ───────────────────────────────────────────
-      # Each profile maps to an encrypted secrets file and produces
-      # packages: pi-<profile> and pi-<profile>-boxed
       profiles = {
         personal = ./secrets/personal.enc.json;
         work = ./secrets/work.enc.json;
       };
 
-      # The default profile — produces the bare "pi" and "pi-boxed" names
       defaultProfile = "personal";
 
       # ── Package builders ──────────────────────────────────────────────
       mkPi = import ./packages/mk-pi.nix;
       mkPiBoxed = import ./packages/mk-pi-boxed.nix;
       mkPiClosure = import ./packages/mk-pi-rootfs.nix;
+      buildPiExtensions = import ./packages/build-pi-extensions.nix;
+
+      # Build extensions for a given system
+      mkExtensions =
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        buildPiExtensions {
+          inherit pkgs;
+          src = pi-extensions;
+        };
 
       # Build all pi packages for a given system
       mkPiPackages =
@@ -77,23 +90,38 @@
           pkgs = nixpkgs.legacyPackages.${system};
           upstream-pi = llm-agents.packages.${system}.pi;
 
+          # Build extensions for this platform
+          ext = mkExtensions system;
+
           # Generate packages for each profile
-          profilePackages = nixpkgs.lib.mapAttrs' (
-            profileName: secretsFile:
-            let
-              isDefault = profileName == defaultProfile;
-              profileArg = if isDefault then null else profileName;
-            in
-            {
-              name = if isDefault then "pi" else "pi-${profileName}";
-              value = mkPi {
-                inherit pkgs;
-                llm-agents-pi = upstream-pi;
-                sops-file = secretsFile;
-                profile = profileArg;
-              };
-            }
-          ) profiles;
+          #   pi / pi-<profile>     — secrets only, no extensions
+          #   pi-ext / pi-<profile>-ext — secrets + extensions + skills
+          profilePackages = nixpkgs.lib.foldl' (acc: item: acc // item) { } (
+            nixpkgs.lib.mapAttrsToList (
+              profileName: secretsFile:
+              let
+                isDefault = profileName == defaultProfile;
+                profileArg = if isDefault then null else profileName;
+                baseName = if isDefault then "pi" else "pi-${profileName}";
+              in
+              {
+                ${baseName} = mkPi {
+                  inherit pkgs;
+                  llm-agents-pi = upstream-pi;
+                  sops-file = secretsFile;
+                  profile = profileArg;
+                };
+                ${baseName + "-ext"} = mkPi {
+                  inherit pkgs;
+                  llm-agents-pi = upstream-pi;
+                  sops-file = secretsFile;
+                  profile = if isDefault then "ext" else "${profileName}-ext";
+                  extensions = ext.extensions;
+                  skills = ext.skills;
+                };
+              }
+            ) profiles
+          );
 
           # Generate boxed packages (only where microsandbox works)
           boxedPackages =
@@ -102,9 +130,15 @@
                 linuxSys = linuxSystem system;
                 pkgs-linux = nixpkgs.legacyPackages.${linuxSys};
                 upstream-pi-linux = llm-agents.packages.${linuxSys}.pi;
+
+                # Build extensions for the target Linux arch
+                ext-linux = mkExtensions linuxSys;
+
                 closure = mkPiClosure {
                   pkgs = pkgs-linux;
                   llm-agents-pi = upstream-pi-linux;
+                  extensions = ext-linux.extensions;
+                  skills = ext-linux.skills;
                 };
               in
               nixpkgs.lib.mapAttrs' (
@@ -122,6 +156,8 @@
                     llm-agents-pi-linux = upstream-pi-linux;
                     msb = microsandbox-flake.packages.${system}.msb;
                     profile = profileArg;
+                    extensions = ext-linux.extensions;
+                    skills = ext-linux.skills;
                   };
                 }
               ) profiles
@@ -134,9 +170,6 @@
       # Build apps from packages (for `nix run`)
       mkAppsFromPackages =
         system: packages:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
         nixpkgs.lib.mapAttrs (name: pkg: {
           type = "app";
           program = "${pkg}/bin/${pkg.meta.mainProgram or name}";
