@@ -10,7 +10,7 @@ Each package is a thin wrapper script that:
 2. Exports the secrets as environment variables
 3. Launches the agent
 
-**Sandboxed variants** run the agent inside a microsandbox microVM instead. Secrets are passed via `--secret` flags — the VM sees only placeholders (`$MSB_KEY`) and a TLS proxy injects the real value exclusively for requests to the allowed API host. The agent cannot exfiltrate secrets.
+**Boxed variants** run the agent inside a microsandbox microVM. At build time, nix computes the linux closure and assembles it into a rootfs. At runtime, the wrapper copies the closure to a temp dir (bypassing macOS HVF restrictions on /nix/store), mounts it into an ubuntu VM at `/nix/store`, and runs the agent. Secrets are passed via `--secret` flags — the VM sees only placeholders (`$MSB_KEY`) and a TLS proxy injects the real value exclusively for requests to the allowed API host. The agent cannot exfiltrate secrets.
 
 ### Profiles
 
@@ -19,8 +19,8 @@ Secrets are organized into profiles — separate encrypted files for different c
 ```
 pi                # personal (default)
 pi-work           # work profile
-pi-sandboxed      # personal in microsandbox
-pi-work-sandboxed # work in microsandbox
+pi-boxed          # personal in microsandbox
+pi-work-boxed     # work in microsandbox
 ```
 
 ### Encryption
@@ -36,7 +36,7 @@ sops secrets/personal.enc.json
 
 # Run (sops will prompt for your SSH key passphrase)
 nix run .#pi
-nix run .#pi-sandboxed  # requires Linux or Apple Silicon
+nix run .#pi-boxed  # requires Linux or Apple Silicon
 ```
 
 ### Set up non-interactive decryption
@@ -52,7 +52,7 @@ nix shell nixpkgs#ssh-to-age -c ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o 
 | Package | x86_64-linux | aarch64-linux | aarch64-darwin | x86_64-darwin |
 |---|---|---|---|---|
 | `pi` / `pi-work` | ✅ | ✅ | ✅ | ✅ |
-| `pi-sandboxed` / `pi-work-sandboxed` | ✅ | ✅ | ✅ | ❌ |
+| `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | ❌ |
 
 ## Operations
 
@@ -64,7 +64,7 @@ sops secrets/personal.enc.json
 # opens your editor — add a new key/value, save, and sops re-encrypts
 ```
 
-If the new secret is used by a sandboxed variant, add a host mapping in the relevant `packages/mk-*-sandboxed.nix`:
+If the new secret is used by a boxed variant, add a host mapping in the relevant `packages/mk-*-boxed.nix`:
 
 ```nix
 secretHosts = {

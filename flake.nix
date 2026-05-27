@@ -46,22 +46,29 @@
         "aarch64-darwin"
       ];
 
+      # The Linux architecture microsandbox VMs run on each host
+      # aarch64-darwin (Apple Silicon) → aarch64-linux VM
+      # x86_64-linux → x86_64-linux VM
+      # aarch64-linux → aarch64-linux VM
+      linuxSystem = system: if system == "aarch64-darwin" then "aarch64-linux" else system;
+
       forEachSystem = systemList: fn: nixpkgs.lib.genAttrs systemList (system: fn system);
 
       # ── Profile definitions ───────────────────────────────────────────
       # Each profile maps to an encrypted secrets file and produces
-      # packages: pi-<profile> and pi-<profile>-sandboxed
+      # packages: pi-<profile> and pi-<profile>-boxed
       profiles = {
         personal = ./secrets/personal.enc.json;
         work = ./secrets/work.enc.json;
       };
 
-      # The default profile — produces the bare "pi" and "pi-sandboxed" names
+      # The default profile — produces the bare "pi" and "pi-boxed" names
       defaultProfile = "personal";
 
       # ── Package builders ──────────────────────────────────────────────
       mkPi = import ./packages/mk-pi.nix;
-      mkPiSandboxed = import ./packages/mk-pi-sandboxed.nix;
+      mkPiBoxed = import ./packages/mk-pi-boxed.nix;
+      mkPiClosure = import ./packages/mk-pi-rootfs.nix;
 
       # Build all pi packages for a given system
       mkPiPackages =
@@ -88,9 +95,18 @@
             }
           ) profiles;
 
-          # Generate sandboxed packages (only where microsandbox works)
-          sandboxedPackages =
+          # Generate boxed packages (only where microsandbox works)
+          boxedPackages =
             if builtins.elem system sandboxSystems then
+              let
+                linuxSys = linuxSystem system;
+                pkgs-linux = nixpkgs.legacyPackages.${linuxSys};
+                upstream-pi-linux = llm-agents.packages.${linuxSys}.pi;
+                closure = mkPiClosure {
+                  pkgs = pkgs-linux;
+                  llm-agents-pi = upstream-pi-linux;
+                };
+              in
               nixpkgs.lib.mapAttrs' (
                 profileName: secretsFile:
                 let
@@ -98,12 +114,13 @@
                   profileArg = if isDefault then null else profileName;
                 in
                 {
-                  name = if isDefault then "pi-sandboxed" else "pi-${profileName}-sandboxed";
-                  value = mkPiSandboxed {
-                    inherit pkgs;
-                    llm-agents-pi = upstream-pi;
-                    msb = microsandbox-flake.packages.${system}.msb;
+                  name = if isDefault then "pi-boxed" else "pi-${profileName}-boxed";
+                  value = mkPiBoxed {
+                    inherit pkgs closure;
                     sops-file = secretsFile;
+                    llm-agents-pi = upstream-pi;
+                    llm-agents-pi-linux = upstream-pi-linux;
+                    msb = microsandbox-flake.packages.${system}.msb;
                     profile = profileArg;
                   };
                 }
@@ -112,7 +129,7 @@
               { };
 
         in
-        profilePackages // sandboxedPackages;
+        profilePackages // boxedPackages;
 
       # Build apps from packages (for `nix run`)
       mkAppsFromPackages =
