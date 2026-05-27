@@ -22,14 +22,10 @@ let
   lib = pkgs.lib;
 
   # Build -e <path> flags for each extension
-  extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (
-    lib.attrValues extensions
-  );
+  extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (lib.attrValues extensions);
 
   # Build --skill <path> flags for each skill
-  skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (
-    lib.attrValues skills
-  );
+  skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (lib.attrValues skills);
 in
 pkgs.writeShellApplication {
   inherit name;

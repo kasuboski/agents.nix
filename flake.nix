@@ -134,11 +134,30 @@
                 # Build extensions for the target Linux arch
                 ext-linux = mkExtensions linuxSys;
 
+                # Extra tooling packages available inside the boxed VM
+                extraPackages = with pkgs-linux; [
+                  mise
+                  gh
+                  fd
+                  ripgrep
+                ];
+
+                # Entrypoint script that sets PATH inside the VM so all tools are discoverable.
+                # Using an entrypoint script instead of msb --env because --env interferes
+                # with the --secret mechanism for unexploitable secrets.
+                entrypoint = pkgs-linux.writeShellScript "entrypoint" ''
+                  export PATH="${
+                    pkgs-linux.lib.makeBinPath ([ upstream-pi-linux ] ++ extraPackages)
+                  }:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+                  exec "$@"
+                '';
+
                 closure = mkPiClosure {
                   pkgs = pkgs-linux;
                   llm-agents-pi = upstream-pi-linux;
                   extensions = ext-linux.extensions;
                   skills = ext-linux.skills;
+                  inherit extraPackages entrypoint;
                 };
               in
               nixpkgs.lib.mapAttrs' (
@@ -150,7 +169,7 @@
                 {
                   name = if isDefault then "pi-boxed" else "pi-${profileName}-boxed";
                   value = mkPiBoxed {
-                    inherit pkgs closure;
+                    inherit pkgs closure entrypoint;
                     sops-file = secretsFile;
                     llm-agents-pi = upstream-pi;
                     llm-agents-pi-linux = upstream-pi-linux;

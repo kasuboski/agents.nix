@@ -15,6 +15,7 @@
 #   profile       - optional profile name suffix
 #   extensions    - optional attrset of extension name → nix store path (linux)
 #   skills        - optional attrset of skill name → nix store path (linux)
+#   entrypoint    - path to the entrypoint script (linux derivation) that sets PATH
 {
   pkgs,
   llm-agents-pi,
@@ -25,36 +26,44 @@
   profile ? null,
   extensions ? { },
   skills ? { },
+  entrypoint,
 }:
 
 let
   name = if profile == null then "pi-boxed" else "pi-${profile}-boxed";
   lib = pkgs.lib;
 
-  # Maps secret env var names to the API host they're allowed to be sent to.
+  # Maps secret env var names to the hosts they're allowed to be sent to.
+  # Each secret can be scoped to multiple hosts (e.g. GITHUB_TOKEN needs both
+  # github.com and api.github.com because msb host matching is exact, not
+  # suffix-based — github.com does NOT match api.github.com).
   secretHosts = {
-    GITHUB_TOKEN = "github.com";
-    TINYFISH_API_KEY = "agent.tinyfish.ai";
-    ZAI_API_KEY = "api.z.ai";
+    GITHUB_TOKEN = [
+      "github.com"
+      "api.github.com"
+    ];
+    TINYFISH_API_KEY = [ "agent.tinyfish.ai" ];
+    ZAI_API_KEY = [ "api.z.ai" ];
   };
 
   # Generate the shell code for building --secret flags.
-  mkSecretFlag = key: host: ''
+  # Produces one --secret flag per host (e.g. GITHUB_TOKEN is repeated for
+  # each of its allowed hosts).
+  mkSecretFlags = key: hosts: ''
     val=$(echo "$SECRETS" | jq -r '.${key}')
     if [ "$val" != "null" ] && [ -n "$val" ]; then
-      MSB_SECRET_ARGS+=(--secret "${key}=$val@${host}")
+    ${lib.concatStringsSep "\n    " (
+      map (host: ''MSB_SECRET_ARGS+=(--secret "${key}=$val@${host}")'') hosts
+    )}
     fi
   '';
 
   # Build -e <path> flags for each extension (using linux paths)
-  extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (
-    lib.attrValues extensions
-  );
+  extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (lib.attrValues extensions);
 
   # Build --skill <path> flags for each skill
-  skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (
-    lib.attrValues skills
-  );
+  skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (lib.attrValues skills);
+
 in
 pkgs.writeShellApplication {
   inherit name;
@@ -80,7 +89,7 @@ pkgs.writeShellApplication {
     # Build --secret flags for microsandbox.
     MSB_SECRET_ARGS=()
 
-    ${lib.concatStringsSep "\n    " (lib.mapAttrsToList mkSecretFlag secretHosts)}
+    ${lib.concatStringsSep "\n    " (lib.mapAttrsToList mkSecretFlags secretHosts)}
 
     # Copy the nix closure to a temp dir.
     # The nix store has root-owned read-only files that msb's virtiofs
@@ -93,11 +102,13 @@ pkgs.writeShellApplication {
 
     # Run pi inside a microsandbox ubuntu VM.
     # Mount the nix closure at /nix/store so pi finds its dependencies.
-    # Extensions and skills are loaded via flags pointing at /nix/store paths.
+    # The entrypoint script sets PATH inside the VM so tools are discoverable.
+    # Using an entrypoint script instead of --env because --env interferes
+    # with msb's --secret mechanism for unexploitable secrets.
     exec msb run ubuntu \
       --volume "$NIX_CLOSURE:/nix/store" \
       "''${MSB_SECRET_ARGS[@]}" \
-      -- ${llm-agents-pi-linux}/bin/pi ${extensionFlags} ${skillFlags} "$@"
+      -- ${entrypoint} ${llm-agents-pi-linux}/bin/pi ${extensionFlags} ${skillFlags} "$@"
   '';
 
   meta = {

@@ -10,16 +10,22 @@
 #   llm-agents-pi - the upstream pi package (must be for the target Linux arch)
 #   extensions    - optional attrset of extension name → nix store path
 #   skills        - optional attrset of skill name → nix store path
+#   extraPackages - optional list of additional packages to include in the closure
+#   entrypoint    - optional entrypoint script to include in the closure
 {
   pkgs,
   llm-agents-pi,
   extensions ? { },
   skills ? { },
+  extraPackages ? [ ],
+  entrypoint ? null,
 }:
 
 let
   # closureInfo computes the runtime closure at evaluation time
-  closure = pkgs.closureInfo { rootPaths = [ llm-agents-pi ]; };
+  closure = pkgs.closureInfo {
+    rootPaths = [ llm-agents-pi ] ++ extraPackages ++ pkgs.lib.optional (entrypoint != null) entrypoint;
+  };
 
   bashPkg = pkgs.bash;
 
@@ -30,11 +36,12 @@ in
 pkgs.runCommand "pi-rootfs" { } ''
   mkdir -p $out/nix/store $out/bin $out/tmp $out/etc
 
-  # Copy each store path from the closure into the rootfs
+  # Copy each store path from the closure into the rootfs.
+  # Most nix store paths are directories, but single-file derivations
+  # (e.g. writeShellScript) produce plain files that must also be copied.
   while IFS= read -r path; do
-    if [ -d "$path" ]; then
-      basename=$(basename "$path")
-      cp -a "$path" "$out/nix/store/$basename"
+    if [ -d "$path" ] || [ -f "$path" ]; then
+      cp -a "$path" "$out/nix/store/$(basename "$path")"
     fi
   done < "${closure}/store-paths"
 
