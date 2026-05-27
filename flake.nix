@@ -93,6 +93,13 @@
           # Build extensions for this platform
           ext = mkExtensions system;
 
+          # Extra tooling packages from llm-agents (available in all pi variants)
+          llm-extra-pkgs = with llm-agents.packages.${system}; [
+            agent-browser
+            zat
+            semble
+          ];
+
           # Generate packages for each profile
           #   pi / pi-<profile>     — secrets only, no extensions
           #   pi-ext / pi-<profile>-ext — secrets + extensions + skills
@@ -110,6 +117,7 @@
                   llm-agents-pi = upstream-pi;
                   sops-file = secretsFile;
                   profile = profileArg;
+                  extraPackages = llm-extra-pkgs;
                 };
                 ${baseName + "-ext"} = mkPi {
                   inherit pkgs;
@@ -118,6 +126,7 @@
                   profile = if isDefault then "ext" else "${profileName}-ext";
                   extensions = ext.extensions;
                   skills = ext.skills;
+                  extraPackages = llm-extra-pkgs;
                 };
               }
             ) profiles
@@ -135,12 +144,18 @@
                 ext-linux = mkExtensions linuxSys;
 
                 # Extra tooling packages available inside the boxed VM
-                extraPackages = with pkgs-linux; [
-                  mise
-                  gh
-                  fd
-                  ripgrep
-                ];
+                extraPackages =
+                  (with pkgs-linux; [
+                    mise
+                    gh
+                    fd
+                    ripgrep
+                  ])
+                  ++ (with llm-agents.packages.${linuxSys}; [
+                    agent-browser
+                    zat
+                    semble
+                  ]);
 
                 # Entrypoint script that sets PATH inside the VM so all tools are discoverable.
                 # Using an entrypoint script instead of msb --env because --env interferes

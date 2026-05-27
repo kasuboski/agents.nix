@@ -8,6 +8,7 @@
 #   profile       - optional profile name suffix (e.g. "work"). When set, the binary is named "pi-<profile>"
 #   extensions    - optional attrset of extension name → nix store path
 #   skills        - optional attrset of skill name → nix store path
+#   extraPackages - optional list of additional packages to add to PATH
 {
   pkgs,
   llm-agents-pi,
@@ -15,6 +16,7 @@
   profile ? null,
   extensions ? { },
   skills ? { },
+  extraPackages ? [ ],
 }:
 
 let
@@ -30,11 +32,13 @@ in
 pkgs.writeShellApplication {
   inherit name;
 
-  runtimeInputs = with pkgs; [
-    sops
-    jq
-    llm-agents-pi
-  ];
+  runtimeInputs =
+    (with pkgs; [
+      sops
+      jq
+      llm-agents-pi
+    ])
+    ++ extraPackages;
 
   text = ''
     # Decrypt secrets at runtime. sops finds the SSH private key automatically
