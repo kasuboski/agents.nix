@@ -10,13 +10,15 @@ Each package is a thin wrapper script that:
 2. Exports the secrets as environment variables
 3. Launches the agent
 
-**Boxed variants** run the agent inside a microsandbox microVM. At build time, nix computes the linux closure and assembles it into a rootfs. At runtime, the wrapper copies the closure to a temp dir (bypassing macOS HVF restrictions on /nix/store), mounts it into an ubuntu VM at `/nix/store`, and runs the agent. Secrets are passed via `--secret` flags — the VM sees only placeholders (`$MSB_KEY`) and a TLS proxy injects the real value exclusively for requests to the allowed API host. The agent cannot exfiltrate secrets.
+**Boxed variants** run the agent inside a microsandbox microVM as a one-shot command. At build time, nix computes the linux closure and assembles it into a rootfs. At runtime, the wrapper copies the closure to a temp dir (bypassing macOS HVF restrictions on /nix/store), mounts it into an ubuntu VM at `/nix/store`, and runs the agent. Secrets are passed via `--secret` flags — the VM sees only placeholders (`$MSB_KEY`) and a TLS proxy injects the real value exclusively for requests to the allowed API host. The agent cannot exfiltrate secrets. The VM is destroyed when the command exits.
+
+**Session variants** provide persistent microsandbox VMs with a docker-style lifecycle. Instead of running a single command, `pi-session` boots a VM and drops you into a shell. The VM's filesystem persists across stop/start cycles — you can pause work and resume later. Your current directory is bind-mounted at `/workspace` inside the VM. Optionally, [zmx](https://zmx.sh/) is auto-detected for persistent terminal sessions (shell and running processes survive disconnect).
 
 ### Profiles
 
 Secrets are organized into profiles — separate encrypted files for different contexts (personal, work). Each profile produces its own set of packages.
 
-### Extensions vs no extensions
+### Variants
 
 Extensions loaded via `-e` flags conflict with user-installed copies in `~/.pi/agent/`. To avoid this, native packages come in two variants:
 
@@ -24,7 +26,8 @@ Extensions loaded via `-e` flags conflict with user-installed copies in `~/.pi/a
 |---|---|---|---|---|
 | `pi` / `pi-work` | ✅ | ❌ | ❌ | You have extensions installed locally already |
 | `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | You want everything from nix, no local setup |
-| `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | Always — no conflict inside a VM |
+| `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | One-shot sandboxed execution — always includes extensions |
+| `pi-session` / `pi-work-session` | ✅ | ✅ | ✅ | Persistent sandboxed session — drop into a shell, run pi yourself |
 
 ```bash
 # Secrets only — won't conflict with your installed extensions
@@ -33,8 +36,11 @@ nix run .#pi
 # Secrets + extensions + skills from nix
 nix run .#pi-ext
 
-# Fully sandboxed (always includes extensions)
+# Fully sandboxed, one-shot (always includes extensions)
 nix run .#pi-boxed
+
+# Persistent sandboxed session
+nix run .#pi-session
 ```
 
 ### Encryption
@@ -51,8 +57,54 @@ sops secrets/personal.enc.json
 # Run (sops will prompt for your SSH key passphrase)
 nix run .#pi          # secrets only
 nix run .#pi-ext      # secrets + extensions + skills
-nix run .#pi-boxed    # sandboxed (requires Linux or Apple Silicon)
+nix run .#pi-boxed    # one-shot sandboxed
+nix run .#pi-session  # persistent sandboxed session
 ```
+
+### Session usage
+
+```bash
+# Create a session and drop into a shell (the primary command)
+pi-session run my-project
+# You're now in a bash shell inside an ubuntu VM.
+# /workspace is your host's current directory.
+# All nix tools (pi, gh, fd, ripgrep, etc.) are on PATH.
+
+# Run pi yourself
+pi
+
+# Detach (Ctrl+\ if zmx is installed) — VM keeps running
+# Close terminal — shell dies but VM keeps running
+
+# Reconnect later
+pi-session attach my-project
+
+# Stop to free resources (disk state preserved)
+pi-session stop my-project
+
+# Resume
+pi-session start -a my-project
+
+# Done forever
+pi-session rm my-project
+```
+
+All session commands follow docker conventions:
+
+| Command | Description |
+|---|---|
+| `pi-session run <name>` | Create + attach (primary command) |
+| `pi-session run <name> -d` | Create without attaching (detached) |
+| `pi-session create <name>` | Create VM only |
+| `pi-session start <name>` | Start a stopped VM |
+| `pi-session start <name> -a` | Start + attach |
+| `pi-session attach <name>` | Connect to a running VM's shell |
+| `pi-session stop <name>` | Halt VM, preserve disk |
+| `pi-session rm <name>` | Destroy VM and local data |
+| `pi-session exec <name> <cmd>` | Run a one-off command in the VM |
+| `pi-session ls` | List sandboxes |
+
+Session data (nix closure copy) is stored at `~/.local/share/pi-session/<name>/`. If [zmx](https://zmx.sh/) is installed, `attach` creates persistent terminal sessions — your shell, scrollback, and running processes survive disconnect.
 
 ### Set up non-interactive decryption
 
@@ -69,6 +121,7 @@ nix shell nixpkgs#ssh-to-age -c ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o 
 | `pi` / `pi-work` | ✅ | ✅ | ✅ | ✅ |
 | `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | ✅ |
 | `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | ❌ |
+| `pi-session` / `pi-work-session` | ✅ | ✅ | ✅ | ❌ |
 
 ## Extensions & Skills
 

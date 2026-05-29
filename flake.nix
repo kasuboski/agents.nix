@@ -69,6 +69,7 @@
       # ── Package builders ──────────────────────────────────────────────
       mkPi = import ./packages/mk-pi.nix;
       mkPiBoxed = import ./packages/mk-pi-boxed.nix;
+      mkPiSession = import ./packages/mk-pi-session.nix;
       mkPiClosure = import ./packages/mk-pi-rootfs.nix;
       buildPiExtensions = import ./packages/build-pi-extensions.nix;
 
@@ -132,8 +133,9 @@
             ) profiles
           );
 
-          # Generate boxed packages (only where microsandbox works)
-          boxedPackages =
+          # Shared sandbox setup (used by both boxed and session packages)
+          # Only built where microsandbox is supported
+          sandboxPackages =
             if builtins.elem system sandboxSystems then
               let
                 linuxSys = linuxSystem system;
@@ -143,7 +145,7 @@
                 # Build extensions for the target Linux arch
                 ext-linux = mkExtensions linuxSys;
 
-                # Extra tooling packages available inside the boxed VM
+                # Extra tooling packages available inside the VM
                 extraPackages =
                   (with pkgs-linux; [
                     mise
@@ -174,32 +176,54 @@
                   skills = ext-linux.skills;
                   inherit extraPackages entrypoint;
                 };
+
+                # Boxed packages: one-shot msb run with pi
+                boxed = nixpkgs.lib.mapAttrs' (
+                  profileName: secretsFile:
+                  let
+                    isDefault = profileName == defaultProfile;
+                    profileArg = if isDefault then null else profileName;
+                  in
+                  {
+                    name = if isDefault then "pi-boxed" else "pi-${profileName}-boxed";
+                    value = mkPiBoxed {
+                      inherit pkgs closure entrypoint;
+                      sops-file = secretsFile;
+                      llm-agents-pi = upstream-pi;
+                      llm-agents-pi-linux = upstream-pi-linux;
+                      msb = microsandbox-flake.packages.${system}.msb;
+                      profile = profileArg;
+                      extensions = ext-linux.extensions;
+                      skills = ext-linux.skills;
+                    };
+                  }
+                ) profiles;
+
+                # Session packages: stateful VMs with docker-style lifecycle
+                session = nixpkgs.lib.mapAttrs' (
+                  profileName: secretsFile:
+                  let
+                    isDefault = profileName == defaultProfile;
+                    profileArg = if isDefault then null else profileName;
+                  in
+                  {
+                    name = if isDefault then "pi-session" else "pi-${profileName}-session";
+                    value = mkPiSession {
+                      inherit pkgs closure entrypoint;
+                      sops-file = secretsFile;
+                      msb = microsandbox-flake.packages.${system}.msb;
+                      profile = profileArg;
+                    };
+                  }
+                ) profiles;
+
               in
-              nixpkgs.lib.mapAttrs' (
-                profileName: secretsFile:
-                let
-                  isDefault = profileName == defaultProfile;
-                  profileArg = if isDefault then null else profileName;
-                in
-                {
-                  name = if isDefault then "pi-boxed" else "pi-${profileName}-boxed";
-                  value = mkPiBoxed {
-                    inherit pkgs closure entrypoint;
-                    sops-file = secretsFile;
-                    llm-agents-pi = upstream-pi;
-                    llm-agents-pi-linux = upstream-pi-linux;
-                    msb = microsandbox-flake.packages.${system}.msb;
-                    profile = profileArg;
-                    extensions = ext-linux.extensions;
-                    skills = ext-linux.skills;
-                  };
-                }
-              ) profiles
+              boxed // session
             else
               { };
 
         in
-        profilePackages // boxedPackages;
+        profilePackages // sandboxPackages;
 
       # Build apps from packages (for `nix run`)
       mkAppsFromPackages =
