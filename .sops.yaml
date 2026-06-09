@@ -18,7 +18,7 @@ keys:
   - &personal-key3 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFTtz1cMBz2ckdpx2mMr1etZvj6LwGYrpNREGsbCvnC5
 
   # Add trusted machines here:
-  # - &work-machine ssh-ed25519 AAAA...
+  - &work-machine age1a6vdg4nzt0uq88vezcaz6gle3ypxes0eal2us0msgj2w4ma6a4zqj4pgce
 
 creation_rules:
   # Personal profile secrets
@@ -36,4 +36,4 @@ creation_rules:
           - *personal-josh
           - *personal-key2
           - *personal-key3
-          # - *work-machine
+          - *work-machine
