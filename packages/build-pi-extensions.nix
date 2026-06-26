@@ -21,35 +21,58 @@ let
   # NPM dependency hashes per extension.
   # Update by setting to lib.fakeSha256, building, and copying the "got:" value.
   npmDepsHashes = {
-    tinyfish = "sha256-dsWpcEg/dsc2nT9EAiksI+4PJro5pVCQY51hd0Mnwzs="; # includes @tiny-fish/sdk
-    subagent = "sha256-SHJTloDG4hQeF/4ODgG7mWqpPTj6+1q0VVz+pxg7ZxI=";
+    tinyfish = "sha256-Vb/9Q825/y+KnOMeTK3EvIntEAzDgakq7LrKMaaJQ88="; # includes @tiny-fish/sdk
+    agent = "sha256-Cky6DFM+mgjXOwDZiLv85BzQhwh79w/PUQ7/L1qwUbk=";
+    morphllm = "sha256-2sAsiEATSPPs4Bpdlm6ou5TdtWplMhD6fhRhclHlUkw=";
     status-tracker = "sha256-qiY0Xxe0huO1mePe+dXMhtXhEToyOBu4rlE270NMzjU=";
   };
 
-  # Integrity hashes for 3 packages missing from the upstream lockfile.
-  # These are transitive peer deps of pi-coding-agent (provided at runtime by pi).
-  patchedIntegrities = {
-    "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core" =
-      "sha512-LHygOgsW2pgXKb3IkXkOAeZPovHr9VF+EixgXVsDNuB4jmhEOXgshy/zksZ7slkUAx10OQ9W1Ed/2jsnhd1NqA==";
-    "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui" =
+  # npm v7+ omits `integrity` for auto-installed peer deps of
+  # @earendil-works/pi-coding-agent (they get a `resolved` tarball URL but no
+  # hash). fetchNpmDeps requires integrity on every resolvable entry, so we
+  # backfill it at eval time.
+  #
+  # Primary source: a sibling entry in the same lockfile with the same
+  # `resolved` URL that already carries an integrity (npm usually has one).
+  # This is version-agnostic, so it survives pi version bumps.
+  #
+  # Fallback: knownIntegrities below, keyed by resolved tarball URL. Add an
+  # entry ONLY when sibling lookup fails for a URL (rare) — this is the only
+  # version-pinned data, and far narrower than pinning by lockfile path.
+  knownIntegrities = {
+    "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.75.5.tgz" =
       "sha512-LkXUM1/49pvzzeI39Y5wjBMlgafcCf67HCLhB9Z7yuXHy4XgT+VqxWcZVW5hBdhQsHZd0znjJotfGH1BzxMfiA==";
-    "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai" =
-      "sha512-zf1F5kXk1pqZeFShXOqq9ibUk8QdtRoLCDPAjO+hj44e3EUs9/GFO2qnhTC5+JA2uwVCx+WCNe1PiCjlBYWm5w==";
   };
 
-  # Patch the lockfile at eval time (returns a JSON string)
+  # Patch the lockfile at eval time (returns a JSON string): for every entry
+  # with a resolved URL but no integrity, fill it from a sibling entry or the
+  # knownIntegrities fallback. Siblings take precedence (lockfile-local).
   patchLockfileJSON =
     extSrc:
     let
       lockfile = builtins.fromJSON (builtins.readFile "${extSrc}/package-lock.json");
+
+      # resolved URL -> integrity, from entries that already have both.
+      siblingMap = lib.foldl' (
+        acc: pkg:
+        let
+          resolved = pkg.resolved or null;
+        in
+        if resolved != null && pkg ? integrity then acc // { ${resolved} = pkg.integrity; } else acc
+      ) { } (builtins.attrValues lockfile.packages);
+
+      resolvedToIntegrity = knownIntegrities // siblingMap;
     in
     builtins.toJSON (
       lockfile
       // {
         packages = lib.mapAttrs (
           path: pkg:
-          if patchedIntegrities ? ${path} && pkg ? resolved && !(pkg ? integrity) then
-            pkg // { integrity = patchedIntegrities.${path}; }
+          let
+            resolved = pkg.resolved or null;
+          in
+          if resolved != null && !(pkg ? integrity) && resolvedToIntegrity ? ${resolved} then
+            pkg // { integrity = resolvedToIntegrity.${resolved}; }
           else
             pkg
         ) lockfile.packages;

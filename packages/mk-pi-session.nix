@@ -112,7 +112,7 @@ pkgs.writeShellApplication {
         # Remove the local session data (closure copy).
         cleanup_session() {
           local session_name="$1"
-          rm -rf "$SESSION_DIR/$session_name"
+          rm -rf "''${SESSION_DIR:?}/$session_name"
         }
 
         # Decrypt secrets and populate MSB_SECRET_ARGS.
