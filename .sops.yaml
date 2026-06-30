@@ -16,6 +16,7 @@ keys:
   - &personal-josh ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJzR7zD/n14hIPjRWN8lGIj2zSmmFaqBX2Qhf80TOmdQ
   - &personal-key2 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJE8z2Yte2PSMwWQ5KLBTfoEGtdoYx2Ms9Mhpahz7Dc4
   - &personal-key3 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFTtz1cMBz2ckdpx2mMr1etZvj6LwGYrpNREGsbCvnC5
+  - &personal-key4 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG+9mFTZbpCCXPL/D9mhjfqqNCX/4wvZnQVdksUij6G/
 
   # Add trusted machines here:
   - &work-machine age1a6vdg4nzt0uq88vezcaz6gle3ypxes0eal2us0msgj2w4ma6a4zqj4pgce
@@ -28,6 +29,7 @@ creation_rules:
           - *personal-josh
           - *personal-key2
           - *personal-key3
+          - *personal-key4
 
   # Work profile secrets — add work machine keys here
   - path_regex: ^secrets/work\.enc\.json$
