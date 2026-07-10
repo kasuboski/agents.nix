@@ -16,7 +16,6 @@
     # AI agent packages (pi, claude-code, codex, gemini-cli, etc.)
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Microsandbox CLI for VM-based sandboxing
