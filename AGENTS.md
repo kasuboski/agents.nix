@@ -15,3 +15,5 @@ Knowledge lookup:
 There's a folder `knowledge` that contains documentation and cloned repos of dependendent projects.
 
 ALWAYS run `nix fmt` before committing.
+
+Before updating flake input pins, read the update guidance in `README.md` and complete its real-build validation.

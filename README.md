@@ -209,19 +209,38 @@ profiles = {
 
 5. Rebuild: `nix build .#pi-newprofile`
 
-### Update extension npm dependency hashes
+### Update pinned inputs safely
 
-When pi-extensions adds or changes npm dependencies:
-
-1. Set the hash to `""` in `packages/build-pi-extensions.nix` for the affected extension
-2. Build and copy the `got:` value from the error:
+Update only the intended inputs:
 
 ```bash
-nix build .#pi-ext --accept-flake-config
-# error: hash mismatch ... got: sha256-XXXXX
+nix flake update pi-extensions llm-agents
 ```
 
-3. Paste the correct hash back into `npmDepsHashes`
+An update to `pi-extensions` can change its npm lockfiles. This makes the fixed-output hashes in `packages/build-pi-extensions.nix` stale. `nix flake check --no-build` will not catch this because it only evaluates the derivations; always perform a real build:
+
+```bash
+nix build .#pi-ext --no-link --keep-going
+```
+
+If the build reports that an `npmDepsHash` is out of date:
+
+1. Temporarily replace the affected hashes in `npmDepsHashes` with `lib.fakeHash`. When several lockfiles changed, replace all extension hashes and use `--keep-going` to collect every mismatch in one build.
+2. If the root `package-lock.json` changed, also replace `packageResources.npmDepsHash` with `lib.fakeHash`.
+3. Run the real build again and copy each `got: sha256-...` value into the corresponding hash.
+4. Restore hashes that did not change, then rerun the build until it succeeds.
+
+Derivation names describe the bundled extension being built: for example, `pi-agent-1.0.0` means `pi-extensions/extensions/agent`, not the upstream pi package from `llm-agents.nix`.
+
+Finish by formatting and checking the flake:
+
+```bash
+nix fmt
+nix flake check --no-build
+git diff --check
+```
+
+Do not commit or push a pin update unless the real `pi-ext` build succeeds.
 
 ### Add a new agent
 
