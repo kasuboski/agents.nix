@@ -3,13 +3,14 @@
 #
 # The rootfs contains the full nix runtime closure at /nix/store paths,
 # plus minimal FHS directories (/bin/sh, /tmp, /etc).
-# Optionally includes extensions and skills directories.
+# Optionally includes extension, skill, and theme directories.
 #
 # Arguments:
 #   pkgs          - nixpkgs set (aarch64-linux)
 #   llm-agents-pi - the upstream pi package (must be for the target Linux arch)
 #   extensions    - optional attrset of extension name → nix store path
 #   skills        - optional attrset of skill name → nix store path
+#   themes        - optional attrset of theme package name → nix store path
 #   extraPackages - optional list of additional packages to include in the closure
 #   entrypoint    - optional entrypoint script to include in the closure
 {
@@ -17,6 +18,7 @@
   llm-agents-pi,
   extensions ? { },
   skills ? { },
+  themes ? { },
   extraPackages ? [ ],
   entrypoint ? null,
 }:
@@ -32,6 +34,7 @@ let
   # Extension paths that need to be in the closure
   extensionPaths = builtins.attrValues extensions;
   skillPaths = builtins.attrValues skills;
+  themePaths = builtins.attrValues themes;
 in
 pkgs.runCommand "pi-rootfs" { } ''
   mkdir -p $out/nix/store $out/bin $out/tmp $out/etc
@@ -45,14 +48,14 @@ pkgs.runCommand "pi-rootfs" { } ''
     fi
   done < "${closure}/store-paths"
 
-  # Copy extensions and skills into the rootfs
+  # Copy bundled resources into the rootfs
   # (they're already in /nix/store but may not be in pi's closure)
   ${pkgs.lib.concatMapStringsSep "\n" (path: ''
     basename=$(basename "${path}")
     if [ ! -e "$out/nix/store/$basename" ]; then
       cp -a "${path}" "$out/nix/store/$basename"
     fi
-  '') (extensionPaths ++ skillPaths)}
+  '') (extensionPaths ++ skillPaths ++ themePaths)}
 
   # Symlink bash to /bin/sh so shell scripts work inside the VM
   ln -sf "${bashPkg}/bin/bash" "$out/bin/sh"

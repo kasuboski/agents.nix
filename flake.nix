@@ -126,6 +126,7 @@
                   profile = if isDefault then "ext" else "${profileName}-ext";
                   extensions = ext.extensions;
                   skills = ext.skills;
+                  themes = ext.themes;
                   extraPackages = llm-extra-pkgs;
                 };
               }
@@ -173,6 +174,7 @@
                   llm-agents-pi = upstream-pi-linux;
                   extensions = ext-linux.extensions;
                   skills = ext-linux.skills;
+                  themes = ext-linux.themes;
                   inherit extraPackages entrypoint;
                 };
 
@@ -194,6 +196,7 @@
                       profile = profileArg;
                       extensions = ext-linux.extensions;
                       skills = ext-linux.skills;
+                      themes = ext-linux.themes;
                     };
                   }
                 ) profiles;

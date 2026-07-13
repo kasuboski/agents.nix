@@ -2,7 +2,8 @@
 # All extensions use buildNpmPackage to resolve their dependency tree.
 # The upstream lockfile is patched at eval time (before fetchNpmDeps) to add
 # missing integrity hashes for peer dependency entries.
-# Skills don't need building — just copied as-is.
+# Skills don't need building — just copied as-is. Root package dependencies
+# provide additional resources such as themes.
 #
 # Arguments:
 #   pkgs     - nixpkgs set
@@ -17,6 +18,22 @@ let
 
   extensionNames = builtins.attrNames (builtins.readDir "${src}/extensions");
   skillNames = builtins.attrNames (builtins.readDir "${src}/skills");
+
+  # Root package dependencies (currently the Catppuccin theme).
+  packageResources = pkgs.buildNpmPackage {
+    pname = "pi-extension-resources";
+    version = "1.0.0";
+    inherit src;
+
+    dontBuild = true;
+    npmDepsHash = "sha256-LT20QQWh73XxJ96JhtWAvScYC3P2qbc1i0fe3u9cJCc=";
+    npmDepsFetcherVersion = 2;
+
+    installPhase = ''
+      mkdir -p $out
+      cp -r node_modules/pi-coding-agent-catppuccin $out/catppuccin
+    '';
+  };
 
   # NPM dependency hashes per extension.
   # Update by setting to lib.fakeSha256, building, and copying the "got:" value.
@@ -125,8 +142,12 @@ let
     ''
   );
 
+  themes = {
+    catppuccin = "${packageResources}/catppuccin";
+  };
+
 in
 {
-  inherit extensions skills;
+  inherit extensions skills themes;
 }
 # v2

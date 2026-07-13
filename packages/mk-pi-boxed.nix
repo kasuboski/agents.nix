@@ -2,8 +2,8 @@
 # with unexploitable secrets (TLS proxy substitutes placeholders).
 #
 # Approach: copies the aarch64-linux nix closure to a temp dir at runtime,
-# then mounts it into an ubuntu VM at /nix/store. Extensions and skills are
-# included in the closure and loaded via -e/--skill flags.
+# then mounts it into an ubuntu VM at /nix/store. Extensions, skills, and
+# themes are included in the closure and loaded via explicit flags.
 #
 # Arguments:
 #   pkgs          - nixpkgs set (native system, e.g. aarch64-darwin)
@@ -15,6 +15,7 @@
 #   profile       - optional profile name suffix
 #   extensions    - optional attrset of extension name → nix store path (linux)
 #   skills        - optional attrset of skill name → nix store path (linux)
+#   themes        - optional attrset of theme package name → nix store path (linux)
 #   entrypoint    - path to the entrypoint script (linux derivation) that sets PATH
 {
   pkgs,
@@ -26,6 +27,7 @@
   profile ? null,
   extensions ? { },
   skills ? { },
+  themes ? { },
   entrypoint,
 }:
 
@@ -61,8 +63,9 @@ let
   # Build -e <path> flags for each extension (using linux paths)
   extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (lib.attrValues extensions);
 
-  # Build --skill <path> flags for each skill
+  # Build --skill/--theme flags for each bundled resource path
   skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (lib.attrValues skills);
+  themeFlags = lib.concatMapStringsSep " " (path: "--theme ${path}") (lib.attrValues themes);
 
 in
 pkgs.writeShellApplication {
@@ -108,7 +111,7 @@ pkgs.writeShellApplication {
     exec msb run ubuntu \
       --volume "$NIX_CLOSURE:/nix/store" \
       "''${MSB_SECRET_ARGS[@]}" \
-      -- ${entrypoint} ${llm-agents-pi-linux}/bin/pi ${extensionFlags} ${skillFlags} "$@"
+      -- ${entrypoint} ${llm-agents-pi-linux}/bin/pi ${extensionFlags} ${skillFlags} ${themeFlags} "$@"
   '';
 
   meta = {

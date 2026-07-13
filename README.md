@@ -22,12 +22,12 @@ Secrets are organized into profiles — separate encrypted files for different c
 
 Native packages come in two variants. The bundled variant disables automatic extension and skill discovery, then loads only its explicit Nix store paths, avoiding conflicts with user-installed copies in `~/.pi/agent/`:
 
-| Variant | Secrets | Extensions | Skills | Use when |
-|---|---|---|---|---|
-| `pi` / `pi-work` | ✅ | ❌ | ❌ | Use resources already available locally; never download them |
-| `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | Use Nix-bundled resources; never download them at runtime |
-| `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | One-shot sandboxed execution — always includes extensions |
-| `pi-session` / `pi-work-session` | ✅ | ✅ | ✅ | Persistent sandboxed session — drop into a shell, run pi yourself |
+| Variant | Secrets | Extensions | Skills | Themes | Use when |
+|---|---|---|---|---|---|
+| `pi` / `pi-work` | ✅ | ❌ | ❌ | ❌ | Use resources already available locally; never download them |
+| `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | ✅ | Use Nix-bundled resources; never download them at runtime |
+| `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | ✅ | One-shot sandboxed execution — always includes bundled resources |
+| `pi-session` / `pi-work-session` | ✅ | ✅ | ✅ | ✅ | Persistent sandboxed session — drop into a shell, run pi yourself |
 
 ```bash
 # Secrets only — loads local/already-installed resources without downloading
@@ -123,16 +123,18 @@ nix shell nixpkgs#ssh-to-age -c ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o 
 | `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | ❌ |
 | `pi-session` / `pi-work-session` | ✅ | ✅ | ✅ | ❌ |
 
-## Extensions & Skills
+## Extensions, Skills & Themes
 
 Loaded from [kasuboski/pi-extensions](https://github.com/kasuboski/pi-extensions):
 
 **Extensions** (3): status-tracker, subagent, tinyfish (with `@tiny-fish/sdk` + transitive deps)
-**Skills** (5): agent-browser, deepwiki, develop-testing-strategy, github-actions, grugbrain
+**Skills**: agent-browser, deepwiki, develop-testing-strategy, github-actions, grugbrain, mattpocock, using-agents
 
-Extensions are built with `buildNpmPackage`, which patches the upstream lockfile to add missing integrity hashes for 3 peer dependency entries. Transitive npm dependencies (e.g. `p-retry` inside `@tiny-fish/sdk`) are fully resolved.
+**Themes**: Catppuccin Latte, Frappé, Macchiato, and Mocha
 
-Native wrappers set `PI_OFFLINE=1`. The plain variant can load local paths and packages already installed under `~/.pi/agent`, but startup never clones git packages, runs npm, reconciles package checkouts, checks for updates, or sends install telemetry. The `pi-ext` resources are passed as local Nix store paths with automatic extension and skill discovery disabled, so it uses the bundle without touching user package installations.
+Extensions and dependency-provided resources are built with `buildNpmPackage`. Extension lockfiles are patched to add missing integrity hashes for peer dependency entries, and transitive npm dependencies are fully resolved.
+
+Native wrappers set `PI_OFFLINE=1`. The plain variant can load local paths and packages already installed under `~/.pi/agent`, but startup never clones git packages, runs npm, reconciles package checkouts, checks for updates, or sends install telemetry. The `pi-ext` resources are passed as local Nix store paths with automatic extension, skill, and theme discovery disabled, so it uses the bundle without touching user package installations.
 
 ## Operations
 

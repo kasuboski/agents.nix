@@ -8,6 +8,7 @@
 #   profile       - optional profile name suffix (e.g. "work"). When set, the binary is named "pi-<profile>"
 #   extensions    - optional attrset of extension name → nix store path
 #   skills        - optional attrset of skill name → nix store path
+#   themes        - optional attrset of theme package name → nix store path
 #   extraPackages - optional list of additional packages to add to PATH
 {
   pkgs,
@@ -16,6 +17,7 @@
   profile ? null,
   extensions ? { },
   skills ? { },
+  themes ? { },
   extraPackages ? [ ],
 }:
 
@@ -26,13 +28,16 @@ let
   # Build -e <path> flags for each extension
   extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (lib.attrValues extensions);
 
-  # Build --skill <path> flags for each skill
+  # Build --skill/--theme flags for each bundled resource path
   skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (lib.attrValues skills);
+  themeFlags = lib.concatMapStringsSep " " (path: "--theme ${path}") (lib.attrValues themes);
 
   # Bundled variants load only their explicit Nix resources. Pi keeps explicit
-  # -e/--skill paths enabled when automatic discovery is disabled.
+  # resource paths enabled when automatic discovery is disabled.
   discoveryFlags = lib.concatStringsSep " " (
-    lib.optional (extensions != { }) "--no-extensions" ++ lib.optional (skills != { }) "--no-skills"
+    lib.optional (extensions != { }) "--no-extensions"
+    ++ lib.optional (skills != { }) "--no-skills"
+    ++ lib.optional (themes != { }) "--no-themes"
   );
 in
 pkgs.writeShellApplication {
@@ -68,12 +73,12 @@ pkgs.writeShellApplication {
     # Keep package resolution read-only. Pi still loads local paths and already
     # installed packages from the user's settings, but it does not clone, run
     # npm, reconcile packages, check for updates, or emit install telemetry.
-    # Bundled extensions/skills are local Nix store paths passed below.
+    # Bundled resources are local Nix store paths passed below.
     export PI_OFFLINE=1
 
     # Launch the real pi binary with any passed arguments. Bundled variants
-    # disable resource discovery and load only the explicit -e/--skill paths.
-    exec pi ${discoveryFlags} ${extensionFlags} ${skillFlags} "$@"
+    # disable resource discovery and load only the explicit resource paths.
+    exec pi ${discoveryFlags} ${extensionFlags} ${skillFlags} ${themeFlags} "$@"
   '';
 
   meta = {
