@@ -20,20 +20,20 @@ Secrets are organized into profiles — separate encrypted files for different c
 
 ### Variants
 
-Extensions loaded via `-e` flags conflict with user-installed copies in `~/.pi/agent/`. To avoid this, native packages come in two variants:
+Native packages come in two variants. The bundled variant disables automatic extension and skill discovery, then loads only its explicit Nix store paths, avoiding conflicts with user-installed copies in `~/.pi/agent/`:
 
 | Variant | Secrets | Extensions | Skills | Use when |
 |---|---|---|---|---|
-| `pi` / `pi-work` | ✅ | ❌ | ❌ | You have extensions installed locally already |
-| `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | You want everything from nix, no local setup |
+| `pi` / `pi-work` | ✅ | ❌ | ❌ | Use resources already available locally; never download them |
+| `pi-ext` / `pi-work-ext` | ✅ | ✅ | ✅ | Use Nix-bundled resources; never download them at runtime |
 | `pi-boxed` / `pi-work-boxed` | ✅ | ✅ | ✅ | One-shot sandboxed execution — always includes extensions |
 | `pi-session` / `pi-work-session` | ✅ | ✅ | ✅ | Persistent sandboxed session — drop into a shell, run pi yourself |
 
 ```bash
-# Secrets only — won't conflict with your installed extensions
+# Secrets only — loads local/already-installed resources without downloading
 nix run .#pi
 
-# Secrets + extensions + skills from nix
+# Secrets + extensions + skills from nix, without runtime downloads
 nix run .#pi-ext
 
 # Fully sandboxed, one-shot (always includes extensions)
@@ -131,6 +131,8 @@ Loaded from [kasuboski/pi-extensions](https://github.com/kasuboski/pi-extensions
 **Skills** (5): agent-browser, deepwiki, develop-testing-strategy, github-actions, grugbrain
 
 Extensions are built with `buildNpmPackage`, which patches the upstream lockfile to add missing integrity hashes for 3 peer dependency entries. Transitive npm dependencies (e.g. `p-retry` inside `@tiny-fish/sdk`) are fully resolved.
+
+Native wrappers set `PI_OFFLINE=1`. The plain variant can load local paths and packages already installed under `~/.pi/agent`, but startup never clones git packages, runs npm, reconciles package checkouts, checks for updates, or sends install telemetry. The `pi-ext` resources are passed as local Nix store paths with automatic extension and skill discovery disabled, so it uses the bundle without touching user package installations.
 
 ## Operations
 

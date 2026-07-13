@@ -28,6 +28,12 @@ let
 
   # Build --skill <path> flags for each skill
   skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (lib.attrValues skills);
+
+  # Bundled variants load only their explicit Nix resources. Pi keeps explicit
+  # -e/--skill paths enabled when automatic discovery is disabled.
+  discoveryFlags = lib.concatStringsSep " " (
+    lib.optional (extensions != { }) "--no-extensions" ++ lib.optional (skills != { }) "--no-skills"
+  );
 in
 pkgs.writeShellApplication {
   inherit name;
@@ -59,11 +65,15 @@ pkgs.writeShellApplication {
       export "''${key}=''${value}"
     done
 
-    # Launch the real pi binary with any passed arguments.
-    # If extensions/skills were provided, they're passed via -e/--skill flags.
-    # The user's ~/.pi/agent/ settings are fully preserved — this wrapper is
-    # additive and does not set PI_CODING_AGENT_DIR.
-    exec pi ${extensionFlags} ${skillFlags} "$@"
+    # Keep package resolution read-only. Pi still loads local paths and already
+    # installed packages from the user's settings, but it does not clone, run
+    # npm, reconcile packages, check for updates, or emit install telemetry.
+    # Bundled extensions/skills are local Nix store paths passed below.
+    export PI_OFFLINE=1
+
+    # Launch the real pi binary with any passed arguments. Bundled variants
+    # disable resource discovery and load only the explicit -e/--skill paths.
+    exec pi ${discoveryFlags} ${extensionFlags} ${skillFlags} "$@"
   '';
 
   meta = {
