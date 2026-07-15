@@ -132,11 +132,11 @@
     "pi-extensions": {
       "flake": false,
       "locked": {
-        "lastModified": 1784063344,
-        "narHash": "sha256-AVpY6ZY7XfA1bI5zie73CcST2j9XplxvVHxU6X1czjU=",
+        "lastModified": 1784112948,
+        "narHash": "sha256-XSiO0u3+9mrQWNS3vBMGsTmnT1mFj/cJU8G7wQtg3lA=",
         "owner": "kasuboski",
         "repo": "pi-extensions",
-        "rev": "233824fbcb991828febba6e78007c246e08320b2",
+        "rev": "cb3ce284e0576729ba304099629ecba9c9b0c2c5",
         "type": "github"
       },
       "original": {
