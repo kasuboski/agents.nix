@@ -52,6 +52,10 @@
         "aarch64-darwin"
       ];
 
+      # The upstream llm-agents flake does not publish packages for every
+      # nix-systems platform (currently, x86_64-darwin is absent).
+      agentSystems = builtins.filter (system: builtins.hasAttr system llm-agents.packages) allSystems;
+
       # The Linux architecture microsandbox VMs run on each host
       linuxSystem = system: if system == "aarch64-darwin" then "aarch64-linux" else system;
 
@@ -237,8 +241,8 @@
 
     in
     {
-      # ── Packages ─────────────────────────────────────────────────────
-      packages = forEachSystem allSystems (
+      # ── Packages (for `nix build`) ────────────────────────────────────
+      packages = forEachSystem agentSystems (
         system:
         let
           piPackages = mkPiPackages system;
@@ -250,7 +254,7 @@
       );
 
       # ── Apps (for `nix run`) ─────────────────────────────────────────
-      apps = forEachSystem allSystems (
+      apps = forEachSystem agentSystems (
         system:
         let
           piPackages = mkPiPackages system;
