@@ -92,7 +92,10 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          upstream-pi = llm-agents.packages.${system}.pi;
+          # Use Pi's Node runtime. The standalone Bun binary forces Jiti to
+          # resolve all extension imports itself and currently fails on some
+          # transitive packages (for example @vscode/ripgrep in MorphSDK).
+          upstream-pi = llm-agents.packages.${system}.pi.override { useBun = false; };
 
           # Build extensions for this platform
           ext = mkExtensions system;
@@ -144,7 +147,7 @@
               let
                 linuxSys = linuxSystem system;
                 pkgs-linux = nixpkgs.legacyPackages.${linuxSys};
-                upstream-pi-linux = llm-agents.packages.${linuxSys}.pi;
+                upstream-pi-linux = llm-agents.packages.${linuxSys}.pi.override { useBun = false; };
 
                 # Build extensions for the target Linux arch
                 ext-linux = mkExtensions linuxSys;
