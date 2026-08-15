@@ -127,8 +127,8 @@ nix shell nixpkgs#ssh-to-age -c ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o 
 
 Loaded from [kasuboski/pi-extensions](https://github.com/kasuboski/pi-extensions):
 
-**Extensions** (3): status-tracker, subagent, tinyfish (with `@tiny-fish/sdk` + transitive deps)
-**Skills**: agent-browser, deepwiki, develop-testing-strategy, github-actions, grugbrain, mattpocock, using-agents
+**Extensions** (5): agent, aperture, morphllm, status-tracker, tinyfish (with `@tiny-fish/sdk` + transitive deps)
+**Skills** (10): agent-browser, deepwiki, design-control-loop, develop-testing-strategy, github-actions, grugbrain, herdr, mattpocock, pi-usage, using-agents
 
 **Themes**: Catppuccin Latte, Frappé, Macchiato, and Mocha
 

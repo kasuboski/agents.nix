@@ -40,6 +40,7 @@ let
   npmDepsHashes = {
     tinyfish = "sha256-Vb/9Q825/y+KnOMeTK3EvIntEAzDgakq7LrKMaaJQ88="; # includes @tiny-fish/sdk
     agent = "sha256-Cky6DFM+mgjXOwDZiLv85BzQhwh79w/PUQ7/L1qwUbk=";
+    aperture = "sha256-KHcjO4KYML3wenUV99R+qQF6+YWRiyem106bHoYJM5w=";
     morphllm = "sha256-edi32j+rEdGjkH8J8qjKwXSADfFrQzbRE9xa8vqfb3Q=";
     status-tracker = "sha256-qiY0Xxe0huO1mePe+dXMhtXhEToyOBu4rlE270NMzjU=";
   };
@@ -59,6 +60,16 @@ let
   knownIntegrities = {
     "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.75.5.tgz" =
       "sha512-LkXUM1/49pvzzeI39Y5wjBMlgafcCf67HCLhB9Z7yuXHy4XgT+VqxWcZVW5hBdhQsHZd0znjJotfGH1BzxMfiA==";
+    # 0.84.2: auto-installed peers under pi-coding-agent whose top-level
+    # twins also lack integrity (aperture lockfile).
+    "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.84.2.tgz" =
+      "sha512-8Pn3wSCxj0cfo5I6jxQYVB/3uuQRmHhAlEclyjqpOuMEdQMIODHizRogv56FLdbU+dTiGnybeHQ2N+sV1/L2YA==";
+    "https://registry.npmjs.org/@earendil-works/pi-client/-/pi-client-0.84.2.tgz" =
+      "sha512-/RFSPhD/bZbpOp1oJj+UneSUFSgZhWxzcSENUY+8+8xhoBrWXMYI2t77XNx4Yf+c8YK2qTHquForhNcelYpXvg==";
+    "https://registry.npmjs.org/@earendil-works/pi-protocol/-/pi-protocol-0.84.2.tgz" =
+      "sha512-jbBh03fkeckWEroHpcZBr4w5/Ibat8WwdXFlXHivYQImrQNFtLpDeL0t1cku4hmK0q3pceIRQHkw4fwbM4YILQ==";
+    "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.84.2.tgz" =
+      "sha512-ds2TLihOnM5sLJB3VpXV6y0uR5efVuHf4MN7yDpsty6hA2DUO/EDVzjp/0od0G2JslzVLMjT8T8zavtxVb+qbg==";
   };
 
   # Patch the lockfile at eval time (returns a JSON string): for every entry
@@ -125,7 +136,7 @@ let
       # Extensions are TypeScript loaded by pi at runtime — no build step
       dontBuild = true;
 
-      npmDepsHash = npmDepsHashes.${extName} or lib.fakeSha256;
+      npmDepsHash = npmDepsHashes.${extName} or lib.fakeHash;
       npmDepsFetcherVersion = 2;
 
       installPhase = ''
