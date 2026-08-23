@@ -39,7 +39,7 @@ let
   # Update by setting to lib.fakeHash, building, and copying the "got:" value.
   npmDepsHashes = {
     tinyfish = "sha256-Vb/9Q825/y+KnOMeTK3EvIntEAzDgakq7LrKMaaJQ88="; # includes @tiny-fish/sdk
-    agent = "sha256-Cky6DFM+mgjXOwDZiLv85BzQhwh79w/PUQ7/L1qwUbk=";
+    agent = "sha256-fjAe6s8GXmVMwiKaKDeC8QOvpTemgw/RSkyOUlyZR+U=";
     aperture = "sha256-KHcjO4KYML3wenUV99R+qQF6+YWRiyem106bHoYJM5w=";
     morphllm = "sha256-edi32j+rEdGjkH8J8qjKwXSADfFrQzbRE9xa8vqfb3Q=";
     status-tracker = "sha256-qiY0Xxe0huO1mePe+dXMhtXhEToyOBu4rlE270NMzjU=";
