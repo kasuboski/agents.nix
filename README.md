@@ -20,7 +20,7 @@ Secrets are organized into profiles — separate encrypted files for different c
 
 ### Variants
 
-Native packages come in two variants. The bundled variant disables automatic extension and skill discovery, then loads only its explicit Nix store paths, avoiding conflicts with user-installed copies in `~/.pi/agent/`:
+Native packages come in two variants. The bundled variant disables automatic extension and theme discovery, then loads only its explicit Nix store paths for those resources. Skills remain discoverable from project and user locations as well as explicit Nix bundles:
 
 | Variant | Secrets | Extensions | Skills | Themes | Use when |
 |---|---|---|---|---|---|
@@ -134,7 +134,9 @@ Loaded from [kasuboski/pi-extensions](https://github.com/kasuboski/pi-extensions
 
 Extensions and dependency-provided resources are built with `buildNpmPackage`. Extension lockfiles are patched to add missing integrity hashes for peer dependency entries, and transitive npm dependencies are fully resolved.
 
-Native wrappers set `PI_OFFLINE=1`. The plain variant can load local paths and packages already installed under `~/.pi/agent`, but startup never clones git packages, runs npm, reconciles package checkouts, checks for updates, or sends install telemetry. The `pi-ext` resources are passed as local Nix store paths with automatic extension, skill, and theme discovery disabled, so it uses the bundle without touching user package installations.
+Native wrappers set `PI_OFFLINE=1`. The plain variant can load local paths and packages already installed under `~/.pi/agent`, but startup never clones git packages, runs npm, reconciles package checkouts, checks for updates, or sends install telemetry. The `pi-ext` extensions and themes are passed as local Nix store paths with their automatic discovery disabled. Skills are passed explicitly but project (`.agents/skills/`, `.pi/skills/`) and user skills remain discoverable. The wrapper does not touch user package installations.
+
+Run `nix shell nixpkgs#python3 --command bash tests/pi-ext-skills.sh` to verify project, user, and bundled skill discovery against the built `pi-ext` package. The test uses an isolated fixture and requires project trust because Pi intentionally gates project skills on trust; it stubs `sops` only in the test process and never decrypts real secrets.
 
 ## Operations
 

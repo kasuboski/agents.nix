@@ -32,12 +32,10 @@ let
   skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (lib.attrValues skills);
   themeFlags = lib.concatMapStringsSep " " (path: "--theme ${path}") (lib.attrValues themes);
 
-  # Bundled variants load only their explicit Nix resources. Pi keeps explicit
-  # resource paths enabled when automatic discovery is disabled.
+  # Bundled variants load only explicit Nix extensions/themes. Skills retain
+  # Pi's automatic user and project discovery alongside explicit Nix paths.
   discoveryFlags = lib.concatStringsSep " " (
-    lib.optional (extensions != { }) "--no-extensions"
-    ++ lib.optional (skills != { }) "--no-skills"
-    ++ lib.optional (themes != { }) "--no-themes"
+    lib.optional (extensions != { }) "--no-extensions" ++ lib.optional (themes != { }) "--no-themes"
   );
 in
 pkgs.writeShellApplication {
@@ -77,7 +75,7 @@ pkgs.writeShellApplication {
     export PI_OFFLINE=1
 
     # Launch the real pi binary with any passed arguments. Bundled variants
-    # disable resource discovery and load only the explicit resource paths.
+    # disable extension/theme discovery; skills remain discoverable locally.
     exec pi ${discoveryFlags} ${extensionFlags} ${skillFlags} ${themeFlags} "$@"
   '';
 
