@@ -1,0 +1,43 @@
+# Bootstrap versions; replace "latest" with exact versions after mise install.
+[tools]
+gleam = "latest"
+erlang = "latest"
+rebar = "latest"
+
+[tasks.check]
+description = "Type-check the package"
+run = "gleam check"
+
+[tasks.format]
+description = "Format Gleam source"
+run = "gleam format"
+
+[tasks."format:check"]
+description = "Check formatting without changing files"
+run = "gleam format --check"
+
+[tasks.lint]
+description = "Lint source and tests with Glinter (install as a dev dependency)"
+run = "gleam run -m glinter src/ test/"
+
+[tasks.build]
+description = "Build with compiler warnings treated as errors"
+run = "gleam build --warnings-as-errors"
+
+[tasks.test]
+description = "Run package tests"
+run = "gleam test"
+
+[tasks.run]
+description = "Run the package"
+run = "gleam run"
+
+# Sequential, fail-fast gates: parallel depends can race on Gleam's build dir.
+[tasks.precommit]
+alias = "pre-commit"
+description = "Check formatting, types, lint, build, and tests without modifying source"
+run = "mise run format:check && mise run check && mise run lint && mise run build && mise run test"
+
+[tasks.ci]
+description = "Run the same validation gate as local precommit"
+run = "mise run precommit"

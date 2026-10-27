@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Install npm dependencies for every extension under extensions/
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+ext_dir="$root/extensions"
+
+if [ ! -d "$ext_dir" ]; then
+  echo "No extensions/ directory found at $root"
+  exit 0
+fi
+
+failed=()
+
+for pkg in "$ext_dir"/*/package.json; do
+  dir="$(dirname "$pkg")"
+  name="$(basename "$dir")"
+  printf "\n▸ Installing %s …\n" "$name"
+  if (cd "$dir" && npm install); then
+    printf "  ✓ %s done\n" "$name"
+  else
+    printf "  ✗ %s failed\n" "$name" >&2
+    failed+=("$name")
+  fi
+done
+
+if [ ${#failed[@]} -ne 0 ]; then
+  printf "\nFailed: %s\n" "${failed[*]}" >&2
+  exit 1
+fi
+
+printf "\nAll extensions installed.\n"

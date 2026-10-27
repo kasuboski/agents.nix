@@ -1,0 +1,25 @@
+{
+  "name": "pi-morphllm",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@sinclair/typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "^0.75.5",
+    "@earendil-works/pi-coding-agent": "^0.75.5",
+    "@sinclair/typebox": "^0.34.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@morphllm/morphsdk": "^0.2.191"
+  }
+}

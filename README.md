@@ -1,6 +1,6 @@
 # agents.nix
 
-Personal AI coding agent wrappers. Takes agents from [llm-agents.nix](https://github.com/numtide/llm-agents.nix) and wraps them with secrets from [sops](https://github.com/getsops/sops) and optional sandboxing via [microsandbox](https://github.com/superradcompany/microsandbox). Extensions and skills come from [pi-extensions](https://github.com/kasuboski/pi-extensions).
+Personal AI coding agent wrappers. Takes agents from [llm-agents.nix](https://github.com/numtide/llm-agents.nix) and wraps them with secrets from [sops](https://github.com/getsops/sops) and optional sandboxing via [microsandbox](https://github.com/superradcompany/microsandbox). First-party Pi extensions and skills are maintained in [`pi-extensions/`](pi-extensions/).
 
 ## How it works
 
@@ -125,18 +125,24 @@ nix shell nixpkgs#ssh-to-age -c ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o 
 
 ## Extensions, Skills & Themes
 
-Loaded from [kasuboski/pi-extensions](https://github.com/kasuboski/pi-extensions):
+Loaded from the first-party [`pi-extensions/`](pi-extensions/) source tree:
 
-**Extensions** (5): agent, aperture, morphllm, status-tracker, tinyfish (with `@tiny-fish/sdk` + transitive deps)
-**Skills** (10): agent-browser, deepwiki, design-control-loop, develop-testing-strategy, github-actions, grugbrain, herdr, mattpocock, pi-usage, using-agents
+**Extensions** (7): agent, aperture, background-terminals, morphllm, status-tracker, telemetry, tinyfish (with `@tiny-fish/sdk` + transitive deps)
+**Skills** (13): agent-browser, deepwiki, design-control-loop, develop-testing-strategy, diagram-design, github-actions, gleam, grugbrain, herdr, mattpocock, pi-usage, share-output, using-agents
 
-**Themes**: Catppuccin Latte, Frappé, Macchiato, and Mocha
+The source snapshot originated at `kasuboski/pi-extensions` revision `92e0c102e4a6bb60d822ab481aad9bb5fc031a9d`; future edits are maintained here.
+
+**Themes**: Catppuccin Latte, Frappé, Macchiato, and Mocha. The root npm lockfile pins the upstream theme package; Nix installs it at build time and passes the four palette JSON files explicitly to Pi. The package directory itself is not passed as a theme directory, since Pi would also try to parse its `package.json` as a theme.
 
 Extensions and dependency-provided resources are built with `buildNpmPackage`. Extension lockfiles are patched to add missing integrity hashes for peer dependency entries, and transitive npm dependencies are fully resolved.
 
-Native wrappers set `PI_OFFLINE=1`. The plain variant can load local paths and packages already installed under `~/.pi/agent`, but startup never clones git packages, runs npm, reconciles package checkouts, checks for updates, or sends install telemetry. The `pi-ext` extensions and themes are passed as local Nix store paths with their automatic discovery disabled. Skills are passed explicitly but project (`.agents/skills/`, `.pi/skills/`) and user skills remain discoverable. The wrapper does not touch user package installations.
+Native wrappers set `PI_OFFLINE=1`. The plain `pi` wrapper decrypts sops secrets at launch. It can load local paths and packages already installed under `~/.pi/agent`, but startup never clones git packages, runs npm, reconciles package checkouts, checks for updates, or sends install telemetry. The `pi-ext` extensions and themes are passed as local Nix store paths with their automatic discovery disabled. Skills are passed explicitly but project (`.agents/skills/`, `.pi/skills/`) and user skills remain discoverable. The wrapper does not touch user package installations.
 
 Run `nix shell nixpkgs#python3 --command bash tests/pi-ext-skills.sh` to verify project, user, and bundled skill discovery against the built `pi-ext` package. The test uses an isolated fixture and requires project trust because Pi intentionally gates project skills on trust; it stubs `sops` only in the test process and never decrypts real secrets.
+
+Run `mise exec node@24.20.0 -- bash tests/pi-ext-themes.sh` to verify that the built wrapper's theme flags load all four palettes without diagnostics. This test uses the packaged Pi's real resource loader in an isolated fixture and intercepts decryption and the final launch; it never decrypts secrets or contacts a model provider.
+
+Run `nix build --impure --file tests/pi-rootfs.nix --no-link -L` to test the actual sandbox rootfs builder with small synthetic Pi, extension, skill, and theme fixtures. No VM, KVM, secrets, or model access is needed. The rootfs includes one combined runtime closure for Pi, Bash, bundled resources, extra packages, and the optional entrypoint. Resource subpaths retain their complete original `/nix/store/<output>/...` locations; dependencies (including extension `node_modules` symlink targets) are included transitively. The regression checks those locations, same-basename nested themes, plain-file outputs, dependency references, and the minimal rootfs's Bash links.
 
 ## Operations
 
@@ -216,10 +222,10 @@ profiles = {
 Update only the intended inputs:
 
 ```bash
-nix flake update pi-extensions llm-agents
+nix flake update llm-agents
 ```
 
-An update to `pi-extensions` can change its npm lockfiles. This makes the fixed-output hashes in `packages/build-pi-extensions.nix` stale. `nix flake check --no-build` will not catch this because it only evaluates the derivations; always perform a real build:
+Pi extension and skill sources are maintained in `pi-extensions/`, so source changes no longer require a flake input update. Changes to extension or root npm lockfiles may make fixed-output hashes in `packages/build-pi-extensions.nix` stale. `nix flake check --no-build` will not catch this because it only evaluates the derivations; always perform a real build:
 
 ```bash
 nix build .#pi-ext --no-link --keep-going

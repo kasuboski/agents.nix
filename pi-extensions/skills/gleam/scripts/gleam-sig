@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Print public Gleam declarations from the project and dependency versions
+# installed for the nearest Gleam package.
+#
+# Usage:
+#   gleam-sig <module-path> [name ...]
+#   gleam-sig gleam/list first
+#   gleam-sig gleam/dynamic/decode field
+#   gleam-sig sqlight
+set -euo pipefail
+
+usage() {
+  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+if [[ $# -lt 1 ]]; then
+  usage
+  exit 0
+fi
+
+module="$1"
+shift
+names=("$@")
+
+if [[ ! "$module" =~ ^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$ ]]; then
+  echo "gleam-sig: invalid Gleam module path '$module'" >&2
+  exit 2
+fi
+
+for name in "${names[@]}"; do
+  if [[ ! "$name" =~ ^[a-z][a-z0-9_]*$ ]]; then
+    echo "gleam-sig: invalid Gleam name '$name'" >&2
+    exit 2
+  fi
+done
+
+find_project_root() {
+  local directory
+  directory="$(pwd -P)"
+
+  while [[ "$directory" != "/" ]]; do
+    if [[ -f "$directory/gleam.toml" ]]; then
+      printf '%s\n' "$directory"
+      return 0
+    fi
+    directory="$(dirname "$directory")"
+  done
+
+  return 1
+}
+
+project_root="$(find_project_root || true)"
+if [[ -z "$project_root" ]]; then
+  echo "gleam-sig: run from a Gleam package or one of its subdirectories" >&2
+  exit 1
+fi
+
+relative_path="$module.gleam"
+file=""
+
+# Local source is authoritative if this package defines the requested module.
+if [[ -f "$project_root/src/$relative_path" ]]; then
+  file="$project_root/src/$relative_path"
+else
+  shopt -s nullglob
+  matches=("$project_root"/build/packages/*/src/"$relative_path")
+  shopt -u nullglob
+
+  case ${#matches[@]} in
+    0)
+      echo "gleam-sig: module '$module' is not installed for $project_root" >&2
+      echo "gleam-sig: download or build this package's dependencies first" >&2
+      exit 1
+      ;;
+    1)
+      file="${matches[0]}"
+      ;;
+    *)
+      echo "gleam-sig: module '$module' is ambiguous for $project_root:" >&2
+      printf '  %s\n' "${matches[@]}" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+relative_file="${file#"$project_root"/}"
+printf '# %s  (%s)\n' "$module" "$relative_file"
+
+if [[ ${#names[@]} -eq 0 ]]; then
+  rg --line-number '^(pub type|pub opaque type|pub const|pub fn)' "$file" \
+    || printf '  (no public symbols)\n'
+  exit 0
+fi
+
+print_function_declaration() {
+  local name="$1"
+
+  awk -v wanted="$name" '
+    BEGIN { printing = 0; depth = 0 }
+
+    $0 ~ "^pub fn " wanted "[[:space:]]*\\(" {
+      printing = 1
+    }
+
+    printing {
+      line = $0
+      opened = gsub(/\(/, "(", line)
+      closed = gsub(/\)/, ")", line)
+      depth += opened - closed
+      brace = index(line, "{")
+
+      if (brace > 0) {
+        line = substr(line, 1, brace - 1)
+        sub(/[[:space:]]+$/, "", line)
+      }
+
+      if (printing == 1) {
+        printf "%d:%s\n", NR, line
+        printing = 2
+      } else {
+        printf "    %s\n", line
+      }
+
+      if (brace > 0 || depth == 0) {
+        found = 1
+        exit 0
+      }
+    }
+
+    END {
+      if (!found) exit 1
+    }
+  ' "$file"
+}
+
+for name in "${names[@]}"; do
+  printf '\n'
+  if print_function_declaration "$name"; then
+    continue
+  fi
+
+  if rg --line-number "^pub (opaque )?type ${name}\\b|^pub const ${name}\\b" "$file"; then
+    continue
+  fi
+
+  printf "  '%s' is not a public function, type, or constant in %s\n" "$name" "$module"
+done

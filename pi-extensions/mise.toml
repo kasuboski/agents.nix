@@ -1,0 +1,33 @@
+[tools]
+node = "24.20.0"
+
+[tasks.test-agent]
+description = "Run the agent extension test suite"
+run = "npm --prefix extensions/agent test"
+
+[tasks.test-background-terminals]
+description = "Run the background-terminals extension test suite"
+run = "npm --prefix extensions/background-terminals test"
+
+[tasks.test-telemetry]
+description = "Run the telemetry extension test suite"
+run = "npm --prefix extensions/telemetry test"
+
+[tasks.typecheck-background-terminals]
+description = "Typecheck the background-terminals extension"
+run = "npm --prefix extensions/background-terminals run typecheck"
+
+[tasks.typecheck-telemetry]
+description = "Typecheck the telemetry extension"
+run = "npm --prefix extensions/telemetry run typecheck"
+
+[tasks.precommit]
+description = "Run all extension test suites and typechecks"
+depends = [
+  "test-agent",
+  "test-background-terminals",
+  "test-telemetry",
+  "typecheck-background-terminals",
+  "typecheck-telemetry",
+]
+run = "git -C .. diff --check"

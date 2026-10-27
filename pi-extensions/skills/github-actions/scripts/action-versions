@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# action-versions - Look up the latest version and commit SHA for a GitHub Action
+#
+# Resolves version tags to commit SHAs so you can pin actions:
+#   uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.7
+#
+# Usage:
+#   action-versions <owner/repo>              # latest version + SHA
+#   action-versions <owner/repo> --all        # all semver tags with SHAs
+#   action-versions <owner/repo> --tag v4     # specific tag only
+#   action-versions <owner/repo>@v4           # resolve a pinned reference
+#
+# Requires: gh (authenticated)
+
+set -euo pipefail
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+die() { echo "error: $*" >&2; exit 1; }
+
+info() { echo "$@"; }
+
+# Resolve a tag name to the underlying commit SHA.
+# Handles both lightweight (type=commit) and annotated (type=tag) tags.
+resolve_sha() {
+    local repo="$1" tag="$2"
+    local ref_json
+    ref_json=$(gh api "repos/${repo}/git/ref/tags/${tag}" -q '.' 2>/dev/null) \
+        || die "tag '${tag}' not found in ${repo}"
+    local obj_type obj_sha
+    obj_type=$(echo "$ref_json" | jq -r '.object.type')
+    obj_sha=$(echo "$ref_json" | jq -r '.object.sha')
+
+    if [[ "$obj_type" == "tag" ]]; then
+        # Annotated tag — dereference to get the commit SHA
+        gh api "repos/${repo}/git/tags/${obj_sha}" -q '.object.sha' 2>/dev/null
+    else
+        echo "$obj_sha"
+    fi
+}
+
+# ── Argument parsing ─────────────────────────────────────────────────────────
+
+REPO=""
+SHOW_ALL=false
+SPECIFIC_TAG=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --all)    SHOW_ALL=true; shift ;;
+        --tag)    SPECIFIC_TAG="${2:?--tag requires a value}"; shift 2 ;;
+        --help|-h)
+            sed -n '2,/^$/{ s/^# //; s/^#//; p }' "$0"
+            exit 0
+            ;;
+        -*)
+            die "unknown option: $1\nUsage: action-versions <owner/repo> [--all] [--tag <version>]"
+            ;;
+        *)
+            [[ -n "$REPO" ]] && die "unexpected argument: $1"
+            REPO="$1"
+            shift
+            ;;
+    esac
+done
+
+# Handle owner/repo@v4 syntax — extract repo and specific tag
+if [[ "$REPO" == *@* ]]; then
+    SPECIFIC_TAG="${REPO##*@}"
+    REPO="${REPO%@*}"
+fi
+
+[[ -z "$REPO" ]] && die "Usage: action-versions <owner/repo> [--all] [--tag <version>]"
+[[ "$REPO" == */* ]] || die "'${REPO}' doesn't look like owner/repo"
+
+# ── Fetch tags ───────────────────────────────────────────────────────────────
+
+TAGS_JSON=$(gh api "repos/${REPO}/tags" --paginate -q '.[] | "\(.name)\t\(.commit.sha)"' 2>/dev/null) \
+    || die "failed to fetch tags for ${REPO} (does the repo exist?)"
+
+[[ -z "$TAGS_JSON" ]] && die "no tags found for ${REPO}"
+
+# ── Filter to semver-like tags ───────────────────────────────────────────────
+
+# Match: v1  v1.2  v1.2.3  (with or without 'v' prefix)
+SEMVER_TAGS=$(echo "$TAGS_JSON" | grep -E '^[vV]?[0-9]+' || true)
+[[ -z "$SEMVER_TAGS" ]] && die "no semver tags found for ${REPO}"
+
+# ── Specific tag mode ───────────────────────────────────────────────────────
+
+if [[ -n "$SPECIFIC_TAG" ]]; then
+    # Strip leading v for matching if the user passes bare "4"
+    TAG="$SPECIFIC_TAG"
+    if ! echo "$SEMVER_TAGS" | cut -f1 | grep -qxF "$TAG"; then
+        # Try with v prefix
+        if echo "$SEMVER_TAGS" | cut -f1 | grep -qxF "v${TAG#v}"; then
+            TAG="v${TAG#v}"
+        else
+            die "tag '${SPECIFIC_TAG}' not found in ${REPO}"
+        fi
+    fi
+
+    SHA=$(resolve_sha "$REPO" "$TAG")
+    echo "tag:    ${TAG}"
+    echo "sha:    ${SHA}"
+    echo ""
+    echo "  uses: ${REPO}@${SHA} # ${TAG}"
+    exit 0
+fi
+
+# ── Determine latest version ────────────────────────────────────────────────
+
+# Sort by version (descending). sort -V handles semver well.
+# Separate full semver (v4.1.7) from major-only (v4).
+
+FULL_SEMVER=$(echo "$SEMVER_TAGS" \
+    | awk -F'\t' '$1 ~ /^[vV]?[0-9]+\.[0-9]+(\.[0-9]+)?/' \
+    | sort -t$'\t' -k1 -V -r \
+    | head -1)
+
+MAJOR_SEMVER=$(echo "$SEMVER_TAGS" \
+    | awk -F'\t' '$1 ~ /^[vV]?[0-9]+$/' \
+    | sort -t$'\t' -k1 -V -r \
+    | head -1)
+
+# Prefer the full semver tag (e.g. v4.1.7) over a major-only tag (e.g. v4)
+if [[ -n "$FULL_SEMVER" ]]; then
+    LATEST_TAG=$(echo "$FULL_SEMVER" | cut -f1)
+else
+    LATEST_TAG=$(echo "$MAJOR_SEMVER" | cut -f1)
+fi
+
+# Determine the major version tag (what you'd use in `uses:` without pinning)
+MAJOR_TAG=""
+if [[ -n "$MAJOR_SEMVER" ]]; then
+    MAJOR_TAG=$(echo "$MAJOR_SEMVER" | cut -f1)
+fi
+
+# ── Resolve SHAs ────────────────────────────────────────────────────────────
+
+SHA=$(resolve_sha "$REPO" "$LATEST_TAG")
+
+echo "action: ${REPO}"
+echo "latest: ${LATEST_TAG}"
+echo "sha:    ${SHA}"
+echo ""
+
+# Show the major version tag if it's different from the latest full version
+if [[ -n "$MAJOR_TAG" && "$MAJOR_TAG" != "$LATEST_TAG" ]]; then
+    MAJOR_SHA=$(resolve_sha "$REPO" "$MAJOR_TAG")
+    echo "# major tag (moving):"
+    echo "  uses: ${REPO}@${MAJOR_TAG}"
+    echo "  ->   ${MAJOR_SHA}"
+    echo ""
+fi
+
+echo "# pin to exact version:"
+echo "  uses: ${REPO}@${SHA} # ${LATEST_TAG}"
+
+# ── --all mode ──────────────────────────────────────────────────────────────
+
+if [[ "$SHOW_ALL" == "true" ]]; then
+    echo ""
+    echo "# all versions (SHA from tags API — may differ for annotated tags):"
+    echo "$SEMVER_TAGS" \
+        | sort -t$'\t' -k1 -V -r \
+        | awk -F'\t' '{
+            short = substr($2, 1, 8)
+            printf "  %-12s %s\n", $1, short
+          }'
+fi

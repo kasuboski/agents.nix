@@ -3,7 +3,7 @@
 #
 # The rootfs contains the full nix runtime closure at /nix/store paths,
 # plus minimal FHS directories (/bin/sh, /tmp, /etc).
-# Optionally includes extension, skill, and theme directories.
+# Optionally includes extension, skill, and theme paths and their runtime closures.
 #
 # Arguments:
 #   pkgs          - nixpkgs set (aarch64-linux)
@@ -24,38 +24,46 @@
 }:
 
 let
-  # closureInfo computes the runtime closure at evaluation time
-  closure = pkgs.closureInfo {
-    rootPaths = [ llm-agents-pi ] ++ extraPackages ++ pkgs.lib.optional (entrypoint != null) entrypoint;
-  };
-
   bashPkg = pkgs.bash;
 
-  # Extension paths that need to be in the closure
-  extensionPaths = builtins.attrValues extensions;
-  skillPaths = builtins.attrValues skills;
-  themePaths = builtins.attrValues themes;
+  # Resources may name a file or directory beneath an output. closureInfo needs
+  # the owning store root, not that subpath. Keep the original string context
+  # so Nix still builds the referenced output before computing its closure.
+  resourceRoot =
+    path:
+    let
+      value = toString path;
+      match = builtins.match "(${builtins.storeDir}/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+)(/.*)?" value;
+    in
+    if match == null then
+      throw "mk-pi-rootfs: resource must be an absolute Nix store path: ${value}"
+    else
+      builtins.substring 0 (builtins.stringLength (builtins.head match)) value;
+
+  resourcePaths =
+    builtins.attrValues extensions ++ builtins.attrValues skills ++ builtins.attrValues themes;
+
+  # Compute one combined closure at build time. Shared dependencies and multiple
+  # resources in the same output are copied only once, at their original paths.
+  closure = pkgs.closureInfo {
+    rootPaths = [
+      llm-agents-pi
+      bashPkg
+    ]
+    ++ extraPackages
+    ++ pkgs.lib.optional (entrypoint != null) entrypoint
+    ++ map resourceRoot resourcePaths;
+  };
 in
 pkgs.runCommand "pi-rootfs" { } ''
-  mkdir -p $out/nix/store $out/bin $out/tmp $out/etc
+  mkdir -p "$out${builtins.storeDir}" "$out/bin" "$out/tmp" "$out/etc"
 
   # Copy each store path from the closure into the rootfs.
   # Most nix store paths are directories, but single-file derivations
   # (e.g. writeShellScript) produce plain files that must also be copied.
   while IFS= read -r path; do
-    if [ -d "$path" ] || [ -f "$path" ]; then
-      cp -a "$path" "$out/nix/store/$(basename "$path")"
-    fi
+    cp -a -- "$path" "$out$path"
   done < "${closure}/store-paths"
-
-  # Copy bundled resources into the rootfs
-  # (they're already in /nix/store but may not be in pi's closure)
-  ${pkgs.lib.concatMapStringsSep "\n" (path: ''
-    basename=$(basename "${path}")
-    if [ ! -e "$out/nix/store/$basename" ]; then
-      cp -a "${path}" "$out/nix/store/$basename"
-    fi
-  '') (extensionPaths ++ skillPaths ++ themePaths)}
 
   # Symlink bash to /bin/sh so shell scripts work inside the VM
   ln -sf "${bashPkg}/bin/bash" "$out/bin/sh"

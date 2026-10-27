@@ -1,0 +1,26 @@
+{
+  "name": "pi-aperture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal dedicated Tailscale Aperture provider for pi",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.84.2",
+    "@earendil-works/pi-coding-agent": "^0.84.0",
+    "typescript": "^5.9.3"
+  }
+}

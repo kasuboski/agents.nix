@@ -9,7 +9,7 @@ pi - coding agent (provided by llm-agents.nix)
 sops - encrypt secrets to store in the repo. Must only be decrypted at runtime NOT nix evaluation time.
 
 Guidelines:
-- reference upstream files in flake inputs or fetchURL etc. NEVER local paths
+- Sources committed in this repository, including vendored third-party code, may be referenced in-tree. Do not depend on machine-local or sibling checkouts (for example `../some-repo`, `/home/...` repositories, or `knowledge/repos`); external sources must be pinned upstream files in flake inputs or `fetchURL`.
 
 Knowledge lookup:
 There's a folder `knowledge` that contains documentation and cloned repos of dependendent projects.

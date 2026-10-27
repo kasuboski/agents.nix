@@ -155,9 +155,14 @@ let
     ''
   );
 
-  themes = {
-    catppuccin = "${packageResources}/catppuccin";
-  };
+  # --theme directories are scanned for every JSON file, including package.json.
+  # Pass the actual palettes, not the npm package root, to avoid invalid themes.
+  themes = lib.genAttrs [
+    "catppuccin-frappe"
+    "catppuccin-latte"
+    "catppuccin-macchiato"
+    "catppuccin-mocha"
+  ] (name: "${packageResources}/catppuccin/${name}.json");
 
 in
 {

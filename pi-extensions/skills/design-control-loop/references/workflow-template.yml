@@ -1,0 +1,258 @@
+# Pi agent control-loop workflow
+#
+# This workflow has two modes:
+# 1. scheduled/manual mode: run one sense -> control -> actuate iteration on a fresh branch
+#    and open a PR. When sensor/controller/actuator are fused, collapse them to one step.
+# 2. /iterate mode: when a maintainer comments on an agent-created PR, update that PR
+#    and optionally update the memory file for future runs.
+#
+# Replace every <placeholder> and the sensor/controller commands before using this file.
+# Set repository variables `PI_PROVIDER`, `PI_MODEL`, and optional `PI_VERSION`; set the
+# `PI_API_KEY` repository secret when the runner cannot use a pi auth file or provider env var.
+
+name: "Pi: <Task Title>"
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # Choose a cadence appropriate to the task.
+  workflow_dispatch:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pi-agent-<task-slug>
+  cancel-in-progress: true
+
+jobs:
+  agent-task:
+    if: |
+      github.event_name != 'issue_comment' ||
+      (
+        github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/iterate') &&
+        (github.event.comment.author_association == 'OWNER' ||
+         github.event.comment.author_association == 'MEMBER' ||
+         github.event.comment.author_association == 'COLLABORATOR')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check iterate marker and bound scheduled work
+        id: agent_gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_URL: ${{ github.event.issue.pull_request.url }}
+          WORKFLOW_ID: pi-agent-<task-slug>
+          AGENT_LABEL: pi-agent-<task-slug>
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            EXISTING_PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --label "$AGENT_LABEL" --json number,url --limit 1)
+            if [ "$(echo "$EXISTING_PR" | jq 'length')" -gt 0 ]; then
+              echo "run_agent=false" >> "$GITHUB_OUTPUT"
+              echo "Open PR already exists for $AGENT_LABEL; no-op."
+              exit 0
+            fi
+          fi
+
+          if [ "$EVENT_NAME" != "issue_comment" ]; then
+            echo "run_agent=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_DATA=$(gh api "$PR_URL")
+          BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+          if grep -Fq "<!-- pi-agent:workflow=$WORKFLOW_ID;" <<< "$BODY"; then
+            echo "run_agent=true" >> "$GITHUB_OUTPUT"
+            echo "number=$(echo "$PR_DATA" | jq -r '.number')" >> "$GITHUB_OUTPUT"
+            echo "head_ref=$(echo "$PR_DATA" | jq -r '.head.ref')" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_agent=false" >> "$GITHUB_OUTPUT"
+            echo "PR was not created by $WORKFLOW_ID; no-op."
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name != 'issue_comment'
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v5
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name == 'issue_comment'
+        with:
+          ref: ${{ steps.agent_gate.outputs.head_ref }}
+          fetch-depth: 0
+
+      - name: Configure git user and branch
+        if: steps.agent_gate.outputs.run_agent == 'true'
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "issue_comment" ]; then
+            BRANCH="<branch-prefix>/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+            git checkout -b "$BRANCH"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Pi is installed separately from the target repository's dependencies.
+      # Pin the version here if reproducibility matters.
+      - name: Install Node.js and pi
+        if: steps.agent_gate.outputs.run_agent == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Bun
+        if: steps.agent_gate.outputs.run_agent == 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install pi CLI
+        if: steps.agent_gate.outputs.run_agent == 'true'
+        env:
+          PI_VERSION: ${{ vars.PI_VERSION }}
+        run: npm install --global "@earendil-works/pi-coding-agent@${PI_VERSION:-latest}"
+
+      - name: Install repository dependencies
+        if: steps.agent_gate.outputs.run_agent == 'true'
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then npm ci
+          elif [ -f bun.lock ] || [ -f bun.lockb ]; then bun install --frozen-lockfile
+          elif [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable
+          else echo "No recognized lockfile; skipping dependency install."
+          fi
+
+      # /iterate updates the existing PR rather than starting a new sense/control cycle.
+      - name: Actuator — iterate on feedback
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.agent_gate.outputs.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          PI_PROVIDER: ${{ vars.PI_PROVIDER }}
+          PI_MODEL: ${{ vars.PI_MODEL }}
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        run: |
+          set -o pipefail
+          bun .github/scripts/agent-iteration.ts \
+            --command prompt \
+            --workflow pi-agent-<task-slug> \
+            --memory .github/agent-memory/<task-slug>.md \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --comment-body "$COMMENT_BODY" > /tmp/agent-prompt.md
+
+          PI_ARGS=(--approve --no-session)
+          [ -n "${PI_PROVIDER:-}" ] && PI_ARGS+=(--provider "$PI_PROVIDER")
+          [ -n "${PI_MODEL:-}" ] && PI_ARGS+=(--model "$PI_MODEL")
+          [ -n "${PI_API_KEY:-}" ] && PI_ARGS+=(--api-key "$PI_API_KEY")
+          pi -p "$(cat /tmp/agent-prompt.md)" "${PI_ARGS[@]}" \
+            2> >(tee /tmp/agent-diagnostics.txt >&2) \
+            | tee /tmp/agent-output.txt
+          cp /tmp/agent-output.txt /tmp/pr-body.md
+
+      # Scheduled/manual path: one sense -> control -> actuate iteration.
+      - name: Sensor — measure current state
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name != 'issue_comment'
+        run: |
+          # Replace this with the designed sensor. It must write a stable measurement.
+          # <sensor command> > /tmp/sensor-output.json
+          echo "TODO: run the sensor and write /tmp/sensor-output.json"
+
+      - name: Controller — select the next increment
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name != 'issue_comment'
+        run: |
+          # Replace this with the designed controller.
+          # <controller command> /tmp/sensor-output.json > /tmp/controller-output.md
+          echo "TODO: select targets and write /tmp/controller-output.md"
+
+      - name: Actuator — run pi
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name != 'issue_comment'
+        env:
+          PI_PROVIDER: ${{ vars.PI_PROVIDER }}
+          PI_MODEL: ${{ vars.PI_MODEL }}
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        run: |
+          set -o pipefail
+          MEMORY_CONTENT="$(cat .github/agent-memory/<task-slug>.md)"
+          CONTROLLER_OUTPUT="$(cat /tmp/controller-output.md 2>/dev/null || true)"
+          PROMPT="$(cat <<EOF
+          You are the pi actuator for the <Task Title> control loop. Work only within the agreed scope.
+
+          Begin by using the <skill-name> skill. Read the repository's actuator skill before editing. Make one small, reviewable increment from the selected work below. Inspect the source of truth, follow existing patterns, run the required validation, and commit the change. Do not broaden scope or perform unrelated cleanup.
+
+          ## Selected work
+
+          $CONTROLLER_OUTPUT
+
+          ## Agent Memory
+
+          $MEMORY_CONTENT
+
+          ## Finishing
+
+          Report changed files, source-of-truth checks, validation results, and any blockers in concise GitHub-flavored markdown. This response becomes the PR body.
+          EOF
+          )"
+
+          PI_ARGS=(--approve --no-session)
+          [ -n "${PI_PROVIDER:-}" ] && PI_ARGS+=(--provider "$PI_PROVIDER")
+          [ -n "${PI_MODEL:-}" ] && PI_ARGS+=(--model "$PI_MODEL")
+          [ -n "${PI_API_KEY:-}" ] && PI_ARGS+=(--api-key "$PI_API_KEY")
+          pi -p "$PROMPT" "${PI_ARGS[@]}" \
+            2> >(tee /tmp/agent-diagnostics.txt >&2) \
+            | tee /tmp/agent-output.txt
+
+      - name: Capture PR body
+        if: steps.agent_gate.outputs.run_agent == 'true'
+        run: cp /tmp/agent-output.txt /tmp/pr-body.md
+
+      - name: Push and create PR
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name != 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGENT_LABEL: pi-agent-<task-slug>
+          WORKFLOW_ID: pi-agent-<task-slug>
+        run: |
+          if git diff --quiet origin/main...HEAD; then
+            echo "No commits were created by pi; skipping PR creation."
+            exit 0
+          fi
+
+          git push --set-upstream origin "${{ env.BRANCH }}"
+          bun .github/scripts/agent-iteration.ts \
+            --command footer \
+            --workflow "$WORKFLOW_ID" \
+            --memory .github/agent-memory/<task-slug>.md >> /tmp/pr-body.md
+
+          gh label create "$AGENT_LABEL" --description "Recurring pi agent PR" --color "0E8A16" || true
+          PR_URL=$(gh pr create --title "[$(date +%m/%d)] <Task Title>" --body-file /tmp/pr-body.md)
+          gh pr edit "$PR_URL" --add-label "$AGENT_LABEL"
+
+      - name: Push iteration changes and comment
+        if: steps.agent_gate.outputs.run_agent == 'true' && github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! git diff --quiet HEAD; then
+            git add -A
+            git commit -m "chore: iterate pi agent feedback"
+            git push origin HEAD:${{ steps.agent_gate.outputs.head_ref }}
+          fi
+          gh pr comment ${{ steps.agent_gate.outputs.number }} --body-file /tmp/pr-body.md
+
+      - name: Upload pi output
+        if: always() && steps.agent_gate.outputs.run_agent == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-agent-output
+          path: |
+            /tmp/agent-output.txt
+            /tmp/agent-diagnostics.txt

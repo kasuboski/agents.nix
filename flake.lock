@@ -130,28 +130,11 @@
         "type": "github"
       }
     },
-    "pi-extensions": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1791464766,
-        "narHash": "sha256-icky6UaHaOIERI12LnT7btwZMTjpY3837Gc0Jy2ezhQ=",
-        "owner": "kasuboski",
-        "repo": "pi-extensions",
-        "rev": "92e0c102e4a6bb60d822ab481aad9bb5fc031a9d",
-        "type": "github"
-      },
-      "original": {
-        "owner": "kasuboski",
-        "repo": "pi-extensions",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "llm-agents": "llm-agents",
         "microsandbox-flake": "microsandbox-flake",
         "nixpkgs": "nixpkgs_2",
-        "pi-extensions": "pi-extensions",
         "systems": "systems_2"
       }
     },

@@ -24,12 +24,6 @@
       url = "github:kasuboski/microsandbox-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    # Personal pi extensions and skills
-    pi-extensions = {
-      url = "github:kasuboski/pi-extensions";
-      flake = false;
-    };
   };
 
   outputs =
@@ -39,7 +33,6 @@
       systems,
       llm-agents,
       microsandbox-flake,
-      pi-extensions,
     }:
     let
       # ── Platform matrix ───────────────────────────────────────────────
@@ -84,7 +77,7 @@
         in
         buildPiExtensions {
           inherit pkgs;
-          src = pi-extensions;
+          src = "${self}/pi-extensions";
         };
 
       # Build all pi packages for a given system
