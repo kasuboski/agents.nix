@@ -1,19 +1,60 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TerminalManager, type Terminal } from "./manager.ts";
 import { TerminalList } from "./tui.ts";
 
 export function registerBackgroundTerminals(pi: ExtensionAPI, manager = new TerminalManager()): void {
   let sessionId: string | undefined;
-  const reported = new Set<string>();
-  const matches = (ctx: any) => { try { return sessionId === ctx.sessionManager.getSessionId(); } catch { return false; } };
-  const clean = async () => { sessionId = undefined; reported.clear(); await manager.dispose(); };
-  manager.subscribe(event => {
-    if (event.type !== "completed" || !sessionId || reported.has(event.terminal.id)) return;
-    reported.add(event.terminal.id);
-    pi.sendUserMessage(`Background terminal ${event.terminal.id} finished (exit ${event.terminal.exitCode ?? "unknown"}). Inspect its output with background_terminal_status or background_terminal_logs.`, { deliverAs: "followUp" });
+  const acknowledged = new Set<string>();
+  const pending = new Map<string, Terminal>();
+  let sessionContext: ExtensionContext | undefined;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const acknowledge = (t: Terminal) => {
+    if (t.status === "running") return;
+    acknowledged.add(t.id);
+    pending.delete(t.id);
+  };
+  const notification = () => ({
+    customType: "background-terminal-completed",
+    content: `Background terminals finished:\n${[...pending.values()].map(t => `${t.id}: ${t.status} (exit ${t.exitCode ?? "unknown"})`).join("\n")}\nInspect output with background_terminal_status or background_terminal_logs.`,
+    display: true,
+    details: { ids: [...pending.keys()] },
   });
-  pi.on("session_start", async (_event, ctx) => { await clean(); await manager.beginSession(); try { sessionId = ctx.sessionManager.getSessionId(); } catch {} });
+  const drain = () => {
+    const message = notification();
+    for (const id of pending.keys()) acknowledged.add(id);
+    pending.clear();
+    return message;
+  };
+  // Recheck busy periods (including standalone compaction) without queuing stale messages.
+  const checkIdle = () => {
+    idleTimer = undefined;
+    if (!sessionContext || !pending.size) return;
+    if (sessionContext.isIdle()) pi.sendMessage(drain(), { triggerTurn: true });
+    else { idleTimer = setTimeout(checkIdle, 100); idleTimer.unref(); }
+  };
+  const matches = (ctx: any) => { try { return sessionId === ctx.sessionManager.getSessionId(); } catch { return false; } };
+  const clean = async () => {
+    sessionId = undefined; sessionContext = undefined;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = undefined; pending.clear(); acknowledged.clear();
+    await manager.dispose();
+  };
+  manager.subscribe(event => {
+    if (event.type !== "completed" || !sessionId || acknowledged.has(event.terminal.id)) return;
+    pending.set(event.terminal.id, event.terminal);
+    if (!idleTimer) { idleTimer = setTimeout(checkIdle, 0); idleTimer.unref(); }
+  });
+  pi.on("session_start", async (_event, ctx) => { await clean(); await manager.beginSession(); try { sessionId = ctx.sessionManager.getSessionId(); sessionContext = ctx; } catch {} });
+  pi.on("agent_before_settle", (event, ctx) => {
+    if (!matches(ctx) || !pending.size || event.outcome !== "completed") return;
+    return { entries: [...event.entries, { type: "custom_message" as const, ...drain() }], continue: true };
+  });
+  pi.on("agent_settled", (_event, ctx) => {
+    if (!matches(ctx) || !pending.size) return;
+    // Late arrivals and aborted runs are recorded without restarting the agent.
+    pi.sendMessage(drain(), { triggerTurn: false });
+  });
   pi.on("session_shutdown", async (_event, ctx) => { if (matches(ctx)) await clean(); });
 
   pi.registerTool({
@@ -22,6 +63,8 @@ export function registerBackgroundTerminals(pi: ExtensionAPI, manager = new Term
     async execute(_id, args, signal, _update, ctx) {
       if (!matches(ctx)) throw new Error("Background terminals are unavailable outside an active session");
       const t = manager.start(args.command, args.cwd ?? ctx.cwd);
+      // start() cannot deliver async process completion before this synchronous registration.
+      if (args.wait) acknowledged.add(t.id);
       const cancel = () => { void manager.kill(t.id); };
       if (signal?.aborted) cancel();
       else signal?.addEventListener("abort", cancel, { once: true });
@@ -37,7 +80,7 @@ export function registerBackgroundTerminals(pi: ExtensionAPI, manager = new Term
   pi.registerTool({
     name: "background_terminal_status", label: "Terminal status", description: "Check a tracked terminal's state and captured output.",
     parameters: Type.Object({ id: Type.String() }),
-    async execute(_id, args) { const t = manager.get(args.id); if (!t) throw new Error(`Unknown terminal ${args.id}`); return { content: [{ type: "text", text: formatTerminal(t) }], details: t }; },
+    async execute(_id, args) { const t = manager.get(args.id); if (!t) throw new Error(`Unknown terminal ${args.id}`); acknowledge(t); return { content: [{ type: "text", text: formatTerminal(t) }], details: t }; },
   });
   pi.registerTool({
     name: "background_terminal_logs", label: "Terminal logs", description: "Read complete stdout and stderr logs, including output beyond the in-memory capture limit.",
