@@ -17,7 +17,7 @@
     "@sinclair/typebox": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-agent-core": "^0.75.5",
+    "@earendil-works/pi-agent-core": "^0.99.0",
     "@earendil-works/pi-coding-agent": "^0.75.5",
     "@sinclair/typebox": "^0.34.0"
   }
