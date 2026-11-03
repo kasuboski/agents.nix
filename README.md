@@ -43,6 +43,26 @@ nix run .#pi-boxed
 nix run .#pi-session
 ```
 
+### T3 Code (native)
+
+```bash
+nix run .#t3code                # personal secrets
+nix run .#t3code-work           # work secrets
+nix run .#t3code -- serve --port 3773  # headless foreground server
+```
+
+These launch T3 Code with secrets decrypted once at startup. T3's provider subprocesses inherit those keys; the bundled `pi` executable does not decrypt again. It includes the same extensions, skills, themes, tools and offline resource policy as `pi-ext`. Upstream's other default provider executables remain available too.
+
+In T3's provider settings, **enable Pi** (disabled by default) and leave its binary path as `pi` to use the bundled harness. Pi extensions are not T3 UI plugins; RPC compatibility of every bundled extension is not yet verified. Existing host provider logins remain available. Secrets in the environment are not isolated from providers or terminal subprocesses.
+
+T3 state defaults to `~/.local/share/t3code` or `~/.local/share/t3code-work`. Override with `T3CODE_HOME` or T3's `--base-dir`. Pi still uses its normal user/project configuration and login state; separate T3 directories do not isolate Pi's user configuration. Both profiles prefer T3's default port; pass distinct `--port` values when running concurrently. Telemetry defaults off (`T3CODE_TELEMETRY_ENABLED=false`) but can be explicitly enabled. T3 itself is not offline: authentication, model requests and optional remote features use the network. Prefer foreground execution; upstream service/setup commands can download a runtime outside Nix. No T3 sandbox variant is provided.
+
+Wrapper regression test (fake sops/provider, no real secrets or model requests):
+
+```bash
+nix build --impure --file tests/t3code-wrapper.nix --no-link
+```
+
 ### Encryption
 
 Secrets are encrypted to SSH Ed25519 public keys via sops/age. Decryption works automatically — sops finds your SSH private key and prompts for the passphrase when run from a terminal (same as [litellm-proxy](https://github.com/getsops/sops)). For non-interactive use, you can [create an age identity](#set-up-non-interactive-decryption).

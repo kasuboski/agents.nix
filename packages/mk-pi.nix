@@ -4,7 +4,7 @@
 # Arguments:
 #   pkgs          - nixpkgs set
 #   llm-agents-pi - the upstream pi package from llm-agents.nix
-#   sops-file     - path to the encrypted secrets file (e.g. ./secrets/personal.enc.json)
+#   sops-file     - encrypted secrets file; null inherits parent credentials without decryption
 #   profile       - optional profile name suffix (e.g. "work"). When set, the binary is named "pi-<profile>"
 #   extensions    - optional attrset of extension name → nix store path
 #   skills        - optional attrset of skill name → nix store path
@@ -13,7 +13,7 @@
 {
   pkgs,
   llm-agents-pi,
-  sops-file,
+  sops-file ? null,
   profile ? null,
   extensions ? { },
   skills ? { },
@@ -43,30 +43,35 @@ pkgs.writeShellApplication {
 
   runtimeInputs =
     (with pkgs; [
-      sops
-      jq
       llm-agents-pi
     ])
+    ++ lib.optionals (sops-file != null) [
+      pkgs.sops
+      pkgs.jq
+    ]
     ++ extraPackages;
 
   text = ''
     # Decrypt secrets at runtime. sops finds the SSH private key automatically
     # and prompts for the passphrase via /dev/tty when run from a terminal.
     # For non-interactive use, set up ~/.config/sops/age/keys.txt via ssh-to-age.
-    if ! SECRETS=$(sops -d --input-type json --output-type json "${sops-file}"); then
-      echo "ERROR: Failed to decrypt ${sops-file}" >&2
-      echo "Ensure sops can access your SSH key (passphrase prompt or ssh-agent)." >&2
-      echo "Alternatively, create an age identity:" >&2
-      echo "  ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o ~/.config/sops/age/keys.txt" >&2
-      exit 1
-    fi
+    ${lib.optionalString (sops-file != null) ''
+      if ! SECRETS=$(sops -d --input-type json --output-type json "${sops-file}"); then
+        echo "ERROR: Failed to decrypt ${sops-file}" >&2
+        echo "Ensure sops can access your SSH key (passphrase prompt or ssh-agent)." >&2
+        echo "Alternatively, create an age identity:" >&2
+        echo "  ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o ~/.config/sops/age/keys.txt" >&2
+        exit 1
+      fi
 
-    # Export each key from the secrets file as an environment variable.
-    # Only exports keys that exist in the encrypted file.
-    for key in $(echo "$SECRETS" | jq -r 'keys[]'); do
-      value=$(echo "$SECRETS" | jq -r --arg k "$key" '.[$k]')
-      export "''${key}=''${value}"
-    done
+      # Export each key from the secrets file as an environment variable.
+      # Only exports keys that exist in the encrypted file.
+      for key in $(echo "$SECRETS" | jq -r 'keys[]'); do
+        value=$(echo "$SECRETS" | jq -r --arg k "$key" '.[$k]')
+        export "''${key}=''${value}"
+      done
+      unset SECRETS value
+    ''}
 
     # Keep package resolution read-only. Pi still loads local paths and already
     # installed packages from the user's settings, but it does not clone, run

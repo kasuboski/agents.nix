@@ -64,6 +64,7 @@
 
       # ── Package builders ──────────────────────────────────────────────
       mkPi = import ./packages/mk-pi.nix;
+      mkT3code = import ./packages/mk-t3code.nix;
       mkPiBoxed = import ./packages/mk-pi-boxed.nix;
       mkPiSession = import ./packages/mk-pi-session.nix;
       mkPiClosure = import ./packages/mk-pi-rootfs.nix;
@@ -132,6 +133,35 @@
               }
             ) profiles
           );
+
+          # T3's Pi subprocesses inherit credentials decrypted by the parent.
+          # Keep the executable named pi for T3's default binary discovery.
+          t3Pi = mkPi {
+            inherit pkgs;
+            llm-agents-pi = upstream-pi;
+            extensions = ext.extensions;
+            skills = ext.skills;
+            themes = ext.themes;
+            extraPackages = llm-extra-pkgs;
+          };
+          upstream-t3 = llm-agents.packages.${system}.t3code.override {
+            providerPackages = llm-agents.packages.${system}.t3code.providerPackages ++ [ t3Pi ];
+          };
+          t3Packages = nixpkgs.lib.mapAttrs' (
+            profileName: secretsFile:
+            let
+              profile = if profileName == defaultProfile then null else profileName;
+              name = if profile == null then "t3code" else "t3code-${profile}";
+            in
+            {
+              inherit name;
+              value = mkT3code {
+                inherit pkgs profile;
+                t3code = upstream-t3;
+                sops-file = secretsFile;
+              };
+            }
+          ) profiles;
 
           # Shared sandbox setup (used by both boxed and session packages)
           # Only built where microsandbox is supported
@@ -225,7 +255,7 @@
               { };
 
         in
-        profilePackages // sandboxPackages;
+        profilePackages // t3Packages // sandboxPackages;
 
       # Build apps from packages (for `nix run`)
       mkAppsFromPackages =
