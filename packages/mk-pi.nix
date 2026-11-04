@@ -19,6 +19,7 @@
   skills ? { },
   themes ? { },
   extraPackages ? [ ],
+  restoreGithubToken ? false,
 }:
 
 let
@@ -71,6 +72,14 @@ pkgs.writeShellApplication {
         export "''${key}=''${value}"
       done
       unset SECRETS value
+    ''}
+
+    ${lib.optionalString restoreGithubToken ''
+      if [[ -n "''${AGENTS_GITHUB_TOKEN:-}" ]]; then
+        export GH_TOKEN="$AGENTS_GITHUB_TOKEN"
+        export GITHUB_TOKEN="$AGENTS_GITHUB_TOKEN"
+      fi
+      unset AGENTS_GITHUB_TOKEN
     ''}
 
     # Keep package resolution read-only. Pi still loads local paths and already

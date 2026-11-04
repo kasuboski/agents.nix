@@ -51,7 +51,7 @@ nix run .#t3code-work           # work secrets
 nix run .#t3code -- serve --port 3773  # headless foreground server
 ```
 
-These launch T3 Code with secrets decrypted once at startup. T3's provider subprocesses inherit those keys; the bundled `pi` executable does not decrypt again. It includes the same extensions, skills, themes, tools and offline resource policy as `pi-ext`. Upstream's other default provider executables remain available too.
+These launch T3 Code with secrets decrypted once at startup. T3's provider subprocesses inherit those keys; the bundled `pi` executable does not decrypt again. It includes the same extensions, skills, themes, tools and offline resource policy as `pi-ext`. T3 unsets `GH_TOKEN` and `GITHUB_TOKEN` so its GitHub commands use your saved login. The token is passed as `AGENTS_GITHUB_TOKEN`; bundled Pi restores both GitHub variables at launch. Upstream's other default provider executables remain available too.
 
 In T3's provider settings, **enable Pi** (disabled by default) and leave its binary path as `pi` to use the bundled harness. Pi extensions are not T3 UI plugins; RPC compatibility of every bundled extension is not yet verified. Existing host provider logins remain available. Secrets in the environment are not isolated from providers or terminal subprocesses.
 

@@ -28,6 +28,15 @@ pkgs.writeShellApplication {
     done < <(printf '%s' "$SECRETS" | jq -r 'keys[]')
     unset SECRETS value
 
+    # Keep GitHub CLI authentication personal in T3; Pi restores this token.
+    unset AGENTS_GITHUB_TOKEN
+    if [[ -n "''${GITHUB_TOKEN:-}" ]]; then
+      export AGENTS_GITHUB_TOKEN="$GITHUB_TOKEN"
+    elif [[ -n "''${GH_TOKEN:-}" ]]; then
+      export AGENTS_GITHUB_TOKEN="$GH_TOKEN"
+    fi
+    unset GH_TOKEN GITHUB_TOKEN
+
     # Isolate T3 state by profile; explicit env/CLI overrides remain available.
     export T3CODE_HOME="''${T3CODE_HOME:-$HOME/.local/share/${name}}"
     export T3CODE_TELEMETRY_ENABLED="''${T3CODE_TELEMETRY_ENABLED:-false}"

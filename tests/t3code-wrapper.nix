@@ -5,9 +5,13 @@ let
   fakeSops = pkgs.writeShellScriptBin "sops" ''
     echo call >> "$TEST_CALLS"
     if [ "''${TEST_FAIL:-0}" = 1 ]; then exit 1; fi
-    printf '%s' '{"TEST_API_KEY":"secret with spaces"}'
+    printf '%s' '{"TEST_API_KEY":"secret with spaces","GITHUB_TOKEN":"agent-token"}'
   '';
   fakePi = pkgs.writeShellScriptBin "pi" ''
+    set -e
+    test "$GH_TOKEN" = agent-token
+    test "$GITHUB_TOKEN" = agent-token
+    test "''${AGENTS_GITHUB_TOKEN+x}" != x
     test "$PI_OFFLINE" = 1
     test "$TEST_API_KEY" = 'secret with spaces'
     printf '%s\n' "$@" >> "$TEST_ARGS"
@@ -15,6 +19,7 @@ let
   pi = import ../packages/mk-pi.nix {
     inherit pkgs;
     llm-agents-pi = fakePi;
+    restoreGithubToken = true;
   };
   t3 = pkgs.writeShellApplication {
     name = "t3";
@@ -22,6 +27,8 @@ let
     text = ''
       test "$T3CODE_HOME" = "$EXPECTED_HOME"
       test "$T3CODE_TELEMETRY_ENABLED" = false
+      test "''${GH_TOKEN+x}" != x
+      test "''${GITHUB_TOKEN+x}" != x
       pi --mode rpc "$@"
       pi --version
     '';
@@ -44,6 +51,7 @@ pkgs.runCommand "t3code-wrapper-tests" { } ''
   export HOME="$TMPDIR/home"
   mkdir -p "$HOME"
   export TEST_CALLS="$TMPDIR/calls" TEST_ARGS="$TMPDIR/args"
+  export GH_TOKEN=ambient-token
   export EXPECTED_HOME="$HOME/.local/share/t3code"
   ${personal}/bin/t3code 'argument with spaces'
   test "$(wc -l < "$TEST_CALLS")" = 1

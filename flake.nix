@@ -138,6 +138,7 @@
           # Keep the executable named pi for T3's default binary discovery.
           t3Pi = mkPi {
             inherit pkgs;
+            restoreGithubToken = true;
             llm-agents-pi = upstream-pi;
             extensions = ext.extensions;
             skills = ext.skills;
