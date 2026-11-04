@@ -1,5 +1,5 @@
 [tools]
-node = "24.20.0"
+node = "24.22.2"
 
 [tasks.test-agent]
 description = "Run the agent extension test suite"
