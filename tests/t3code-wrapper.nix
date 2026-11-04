@@ -27,6 +27,29 @@ let
     text = ''
       test "$T3CODE_HOME" = "$EXPECTED_HOME"
       test "$T3CODE_TELEMETRY_ENABLED" = false
+      ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+        test "$NIX_LD" = "${pkgs.stdenv.cc.bintools.dynamicLinker}"
+        "$NIX_LD" --version > /dev/null
+        case "$NIX_LD_LIBRARY_PATH" in
+          *:/extra-browser-libs) ;;
+          *) echo 'existing browser library path was lost' >&2; exit 1 ;;
+        esac
+        for library in libglib-2.0.so.0 libnss3.so libnspr4.so libatk-1.0.so.0 \
+          libatk-bridge-2.0.so.0 libatspi.so.0 libdbus-1.so.3 libX11.so.6 \
+          libxcb.so.1 libXcomposite.so.1 libXdamage.so.1 libXext.so.6 \
+          libXfixes.so.3 libXrandr.so.2 libxkbcommon.so.0 libgbm.so.1 \
+          libexpat.so.1 libasound.so.2 libudev.so.1 libc.so.6; do
+          found=0
+          IFS=: read -r -a directories <<< "$NIX_LD_LIBRARY_PATH"
+          for directory in "''${directories[@]}"; do
+            if [[ -e "$directory/$library" ]]; then found=1; break; fi
+          done
+          if [[ "$found" != 1 ]]; then
+            echo "missing browser library: $library" >&2
+            exit 1
+          fi
+        done
+      ''}
       test "''${GH_TOKEN+x}" != x
       test "''${GITHUB_TOKEN+x}" != x
       pi --mode rpc "$@"
@@ -52,6 +75,7 @@ pkgs.runCommand "t3code-wrapper-tests" { } ''
   mkdir -p "$HOME"
   export TEST_CALLS="$TMPDIR/calls" TEST_ARGS="$TMPDIR/args"
   export GH_TOKEN=ambient-token
+  export NIX_LD=/old-loader NIX_LD_LIBRARY_PATH=/extra-browser-libs
   export EXPECTED_HOME="$HOME/.local/share/t3code"
   ${personal}/bin/t3code 'argument with spaces'
   test "$(wc -l < "$TEST_CALLS")" = 1

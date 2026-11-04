@@ -57,6 +57,8 @@ In T3's provider settings, **enable Pi** (disabled by default) and leave its bin
 
 T3 state defaults to `~/.local/share/t3code` or `~/.local/share/t3code-work`. Override with `T3CODE_HOME` or T3's `--base-dir`. Pi still uses its normal user/project configuration and login state; separate T3 directories do not isolate Pi's user configuration. Both profiles prefer T3's default port; pass distinct `--port` values when running concurrently. Telemetry defaults off (`T3CODE_TELEMETRY_ENABLED=false`) but can be explicitly enabled. T3 itself is not offline: authentication, model requests and optional remote features use the network. Prefer foreground execution; upstream service/setup commands can download a runtime outside Nix. No T3 sandbox variant is provided.
 
+On Linux, the wrapper supplies `NIX_LD` and `NIX_LD_LIBRARY_PATH` for T3's downloaded Chrome Headless Shell, using a matching loader and browser libraries from this flake. Existing `NIX_LD_LIBRARY_PATH` entries are appended. On NixOS, enable `programs.nix-ld.enable = true;` in your host configuration; installing libraries in `environment.systemPackages` alone is insufficient. The host must also provide Fontconfig and fonts (for example `fonts.packages = [ pkgs.liberation_ttf ];`). T3 downloads its pinned browser on first use; `PLAYWRIGHT_BROWSERS_PATH` does not select it. Chrome's sandbox remains enabled; run T3 as a non-root user. On hosts restricting unprivileged user namespaces through AppArmor, the host policy still needs to allow Chrome. `t3 browser setup` uses apt for dependencies and is not a NixOS installer. Restart the T3 server through the updated wrapper to pick up this environment.
+
 Wrapper regression test (fake sops/provider, no real secrets or model requests):
 
 ```bash

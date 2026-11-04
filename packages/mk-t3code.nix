@@ -7,6 +7,26 @@
 }:
 let
   name = if profile == null then "t3code" else "t3code-${profile}";
+  browserLibraries = with pkgs; [
+    glibc
+    glib
+    nspr
+    nss
+    at-spi2-core
+    dbus
+    libx11
+    libxcb
+    libxcomposite
+    libxdamage
+    libxext
+    libxfixes
+    libxrandr
+    libxkbcommon
+    libgbm
+    expat
+    alsa-lib
+    udev
+  ];
 in
 pkgs.writeShellApplication {
   inherit name;
@@ -40,6 +60,12 @@ pkgs.writeShellApplication {
     # Isolate T3 state by profile; explicit env/CLI overrides remain available.
     export T3CODE_HOME="''${T3CODE_HOME:-$HOME/.local/share/${name}}"
     export T3CODE_TELEMETRY_ENABLED="''${T3CODE_TELEMETRY_ENABLED:-false}"
+    ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+      # T3 downloads an unpatched Chrome Headless Shell. On NixOS, nix-ld
+      # needs both its libraries and the matching loader (host glibc may be older).
+      export NIX_LD="${pkgs.stdenv.cc.bintools.dynamicLinker}"
+      export NIX_LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath browserLibraries}''${NIX_LD_LIBRARY_PATH:+:$NIX_LD_LIBRARY_PATH}"
+    ''}
     exec ${t3code}/bin/t3 "$@"
   '';
   meta = {
