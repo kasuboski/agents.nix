@@ -150,7 +150,9 @@ nix shell nixpkgs#ssh-to-age -c ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o 
 Loaded from the first-party [`pi-extensions/`](pi-extensions/) source tree:
 
 **Extensions** (7): agent, aperture, background-terminals, morphllm, status-tracker, telemetry, tinyfish (with `@tiny-fish/sdk` + transitive deps)
-**Skills** (13): agent-browser, deepwiki, design-control-loop, develop-testing-strategy, diagram-design, github-actions, gleam, grugbrain, herdr, mattpocock, pi-usage, share-output, using-agents
+**Skills** (15): agent-browser, babysit-pr, deepwiki, design-control-loop, develop-testing-strategy, diagram-design, github-actions, gleam, grugbrain, herdr, leaving-pr-comments, mattpocock, pi-usage, share-output, using-agents
+
+`babysit-pr` and `leaving-pr-comments` are vendored from [t3dotgg/tstack](https://github.com/t3dotgg/tstack/tree/1085050f3baed1ac724caa4a8166145fb2ac88af/skills) at commit `1085050f3baed1ac724caa4a8166145fb2ac88af`, with upstream license copies in each skill directory. They are bundled automatically in `pi-ext` and T3's bundled Pi. Outside T3, the `babysit-pr` helper requires Python 3 and an authenticated `gh` on PATH.
 
 The source snapshot originated at `kasuboski/pi-extensions` revision `92e0c102e4a6bb60d822ab481aad9bb5fc031a9d`; future edits are maintained here.
 
