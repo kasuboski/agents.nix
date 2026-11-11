@@ -544,7 +544,15 @@ export default async function apertureExtension(
 		};
 	});
 
+	// Refreshes can finish after T3 replaces the session. Pi invalidates the
+	// old context at that point, including its UI and model registry accessors.
+	let activeSession: object | undefined;
+	pi.on("session_shutdown", () => {
+		activeSession = undefined;
+	});
 	pi.on("session_start", (_event, ctx: ExtensionContext) => {
+		const session = {};
+		activeSession = session;
 		knownModels = ctx.modelRegistry.getAll();
 		registrySnapshotReady = true;
 		// pi's own startup refresh runs before extensions load, so trigger the
@@ -554,6 +562,7 @@ export default async function apertureExtension(
 		void ctx.modelRegistry
 			.refresh({ providers: ["aperture"] })
 			.then((result) => {
+				if (activeSession !== session) return;
 				if (process.env.APERTURE_DEBUG) {
 					console.error(
 						`[aperture:debug] refresh done, errors=${
@@ -572,6 +581,7 @@ export default async function apertureExtension(
 				}
 			})
 			.catch((error: unknown) => {
+				if (activeSession !== session) return;
 				ctx.ui.notify(
 					`[aperture] model refresh failed: ${error instanceof Error ? error.message : String(error)}`,
 					"warning",

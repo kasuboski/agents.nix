@@ -166,6 +166,8 @@ Run `nix shell nixpkgs#python3 --command bash tests/pi-ext-skills.sh` to verify 
 
 Run `mise exec node@24.20.0 -- bash tests/pi-ext-themes.sh` to verify that the built wrapper's theme flags load all four palettes without diagnostics. This test uses the packaged Pi's real resource loader in an isolated fixture and intercepts decryption and the final launch; it never decrypts secrets or contacts a model provider.
 
+Run `nix shell nixpkgs#nodejs_24 --command bash tests/pi-aperture-rpc.sh` to verify that late Aperture discovery failures cannot access a replaced session context or terminate Pi. It also exercises real RPC session switching against a delayed local fake gateway, without decrypting secrets or making model requests.
+
 Run `nix build --impure --file tests/pi-rootfs.nix --no-link -L` to test the actual sandbox rootfs builder with small synthetic Pi, extension, skill, and theme fixtures. No VM, KVM, secrets, or model access is needed. The rootfs includes one combined runtime closure for Pi, Bash, bundled resources, extra packages, and the optional entrypoint. Resource subpaths retain their complete original `/nix/store/<output>/...` locations; dependencies (including extension `node_modules` symlink targets) are included transitively. The regression checks those locations, same-basename nested themes, plain-file outputs, dependency references, and the minimal rootfs's Bash links.
 
 ## Operations
