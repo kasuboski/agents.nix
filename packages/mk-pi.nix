@@ -26,14 +26,22 @@ let
   name = if profile == null then "pi" else "pi-${profile}";
   lib = pkgs.lib;
 
-  # Build -e <path> flags for each extension
-  extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (lib.attrValues extensions);
+  # --no-extensions also disables built-ins. Restore MCP and its tool access
+  # extensions explicitly in bundled variants without enabling discovery.
+  builtinExtensions = lib.optionals (extensions != { }) [
+    "builtin:mcp"
+    "builtin:codemode"
+    "builtin:tool-search"
+  ];
+  extensionFlags = lib.concatMapStringsSep " " (path: "-e ${path}") (
+    builtinExtensions ++ lib.attrValues extensions
+  );
 
   # Build --skill/--theme flags for each bundled resource path
   skillFlags = lib.concatMapStringsSep " " (path: "--skill ${path}") (lib.attrValues skills);
   themeFlags = lib.concatMapStringsSep " " (path: "--theme ${path}") (lib.attrValues themes);
 
-  # Bundled variants load only explicit Nix extensions/themes. Skills retain
+  # Bundled variants load only explicit built-in/Nix extensions and Nix themes. Skills retain
   # Pi's automatic user and project discovery alongside explicit Nix paths.
   discoveryFlags = lib.concatStringsSep " " (
     lib.optional (extensions != { }) "--no-extensions" ++ lib.optional (themes != { }) "--no-themes"
