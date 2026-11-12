@@ -18,7 +18,7 @@ def targets(root, base):
     names = sorted(p.name for p in (root / "pi-extensions/extensions").iterdir() if p.is_dir())
     if base is None:
         return ["resources", *names]
-    changed = set(run("git", "diff", "--name-only", base, "HEAD", cwd=root,
+    changed = set(run("git", "diff", "--name-only", base, cwd=root,
                       capture_output=True).stdout.splitlines())
     if changed & {"flake.lock", "packages/build-pi-extensions.nix"}:
         return ["resources", *names]
@@ -79,7 +79,7 @@ def refresh(root, names):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--base", help="Only refresh lockfiles changed between this git ref and HEAD")
+    parser.add_argument("--base", help="Only refresh lockfiles changed since this git ref, including working-tree repairs")
     args = parser.parse_args()
     root = args.root.resolve()
     refresh(root, targets(root, args.base))

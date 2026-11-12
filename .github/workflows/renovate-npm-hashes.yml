@@ -30,8 +30,14 @@ jobs:
         with:
           extra_nix_config: |
             accept-flake-config = true
-      - name: Test the hash updater
-        run: python3 tests/test-update-npm-deps-hashes.py
+      - name: Test dependency maintenance scripts
+        run: |
+          python3 tests/test-update-npm-deps-hashes.py
+          python3 tests/test-repair-npm-integrities.py
+      - name: Repair missing npm integrity metadata
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/repair-npm-integrities.py --base "$BASE_SHA"
       - name: Refresh changed dependency caches
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -45,14 +51,14 @@ jobs:
           nix shell --inputs-from . nixpkgs#nodejs --command bash tests/pi-ext-themes.sh
           nix shell --inputs-from . nixpkgs#python3 --command bash tests/pi-ext-skills.sh
           git diff --check
-      - name: Prepare hash-only patch
+      - name: Prepare dependency repair patch
         id: patch
         shell: bash
         run: |
-          # Refuse to silently omit unrelated changes made by formatting or validation.
-          test -z "$(git diff --name-only -- . ':!packages/build-pi-extensions.nix')"
+          # Refuse unrelated changes, existing integrity edits, or dependency updates.
+          python3 scripts/validate-npm-dependency-patch.py
           mkdir -p "$RUNNER_TEMP/npm-hashes"
-          git diff -- packages/build-pi-extensions.nix > "$RUNNER_TEMP/npm-hashes/hashes.patch"
+          git diff --no-ext-diff HEAD > "$RUNNER_TEMP/npm-hashes/hashes.patch"
           if test -s "$RUNNER_TEMP/npm-hashes/hashes.patch"; then
             echo 'changed=true' >> "$GITHUB_OUTPUT"
           fi
@@ -77,39 +83,33 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.validate.outputs.changed == 'true'
         with:
           name: npm-hashes
           path: ${{ runner.temp }}/npm-hashes
-      - name: Commit and push validated hashes
+      - name: Commit and push validated dependency repairs
         if: needs.validate.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          git apply --include=packages/build-pi-extensions.nix "$RUNNER_TEMP/npm-hashes/hashes.patch"
-          git diff --check
-          python3 -I - <<'PY'
-          import pathlib, re, subprocess
-          name = 'packages/build-pi-extensions.nix'
-          before = subprocess.check_output(['git', 'show', f'HEAD:{name}'], text=True)
-          after = pathlib.Path(name).read_text()
-          def scrub(text):
-              return re.sub(r'sha256-[A-Za-z0-9+/]{43}=', '<hash>', text)
-          if scrub(before) != scrub(after):
-              raise SystemExit('Refusing patch that changes anything other than SHA-256 hashes')
-          PY
+          # Execute the guard from the trusted base, never the PR/artifact version.
+          git show "$BASE_SHA:scripts/validate-npm-dependency-patch.py" > "$RUNNER_TEMP/validate-dependency-patch.py"
+          git apply --index "$RUNNER_TEMP/npm-hashes/hashes.patch"
+          git diff --cached --check
+          python3 -I "$RUNNER_TEMP/validate-dependency-patch.py" --root "$GITHUB_WORKSPACE"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- packages/build-pi-extensions.nix
-          git -c core.hooksPath=/dev/null commit -m 'fix: refresh Nix npm dependency hashes'
+          git -c core.hooksPath=/dev/null commit -m 'fix: repair npm integrity metadata and Nix dependency hashes'
           gh auth setup-git
           # A normal push rejects concurrent updates; never force-push over Renovate.
           git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$HEAD_REF"
-      # GITHUB_TOKEN pushes do not trigger new workflows. Publish the validation
-      # on the new commit (or the original head if hashes were already correct).
+      # Publish on the exact validated SHA, including when follow-up workflow
+      # runs are suppressed or require approval and when no repairs were needed.
       - name: Record validation status
         env:
           GH_TOKEN: ${{ github.token }}
