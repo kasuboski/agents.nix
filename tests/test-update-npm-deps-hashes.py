@@ -37,7 +37,7 @@ class HashUpdaterTests(unittest.TestCase):
             "README.md",
         ])
         self.assertEqual(updater.targets(ROOT, "base-sha"), ["resources", "agent"])
-        self.assertEqual(run.call_args.args[:5], ("git", "diff", "--name-only", "base-sha", "HEAD"))
+        self.assertEqual(run.call_args.args, ("git", "diff", "--name-only", "base-sha"))
 
     @patch.object(updater, "run")
     def test_nix_changes_refresh_all_caches(self, run):

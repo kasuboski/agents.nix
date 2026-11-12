@@ -247,18 +247,29 @@ profiles = {
 
 ### Automatic npm dependency hashes
 
-Same-repository Renovate PRs run `.github/workflows/renovate-npm-hashes.yml`. It refreshes hashes for changed extension/root npm lockfiles, using the actual Nix dependency derivations (including peer-integrity patches). It then runs formatting, a real `pi-ext` build, flake evaluation, and built-in/theme/skill regression tests. Only after validation succeeds does a separate job push a hash-only commit to the PR. Failed fetches or builds never get committed; concurrent branch updates are rejected rather than overwritten. Fork and non-Renovate PRs cannot use the write job.
+Same-repository Renovate PRs run `.github/workflows/renovate-npm-hashes.yml`. It first repairs missing integrity fields in changed extension/root npm lockfiles, then refreshes their Nix dependency hashes using the actual dependency derivations. Nix input/builder changes select all caches. It then runs formatting, a real `pi-ext` build, flake evaluation, and built-in/theme/skill regression tests. Only after validation succeeds does a separate job push the integrity additions and hash changes to the PR. Failed fetches or builds never get committed; concurrent branch updates are rejected rather than overwritten. Fork and non-Renovate PRs cannot use the write job.
 
-The build job has read-only permissions; only the separate push job has write access, and that job never executes PR scripts or dependency builds. No personal access token is needed. Repository Actions policy must allow `GITHUB_TOKEN` write permissions. Pushes using that token do not trigger another workflow run, so the action publishes a `pi-ext-build` commit status on the new validated commit; use that status for branch protection if desired. This validates packaging/resource loading, not every upstream API or live provider interaction, and does not auto-merge PRs.
+The build job has read-only permissions. The separate write job runs a patch guard from the immutable base commit, never PR scripts or dependency builds. It permits only SHA-256 hash replacements in the Nix builder and valid SHA-512 additions to previously missing registry-package integrity fields in existing lockfiles; dependency versions, URLs, existing checksums, other fields, paths, and file modes cannot change. No personal access token is needed. Repository Actions policy must allow `GITHUB_TOKEN` write permissions. The action publishes `pi-ext-build` on the exact validated commit, whether follow-up workflow runs are suppressed or require approval (as observed on GitHub). Use that status for branch protection if desired. This validates packaging/resource loading, not every upstream API or live provider interaction, and does not auto-merge PRs.
 
-Once the workflow is on `main`, rebase existing Renovate PRs onto it to pick up the updater and trigger the workflow. Local use (Python 3 and Nix required):
+Once the workflow is on `main`, rebase existing Renovate PRs onto it to pick up the scripts and trigger the workflow. The standalone integrity repair requires only Python 3; hash refresh/builds also require Nix:
 
 ```bash
+python3 scripts/repair-npm-integrities.py                    # all repository npm lockfiles
 python3 scripts/update-npm-deps-hashes.py                    # all npm caches
-python3 scripts/update-npm-deps-hashes.py --base origin/main # only changed lockfiles
-python3 tests/test-update-npm-deps-hashes.py
 nix build .#pi-ext --no-link --keep-going
+
+# Or limit both steps to lockfiles changed by a dependency PR:
+python3 scripts/repair-npm-integrities.py --base origin/main
+python3 scripts/update-npm-deps-hashes.py --base origin/main
+
+# Repair a specific lockfile (also supports --root /path/to/source):
+python3 scripts/repair-npm-integrities.py pi-extensions/extensions/agent/package-lock.json
+
+python3 tests/test-update-npm-deps-hashes.py
+python3 tests/test-repair-npm-integrities.py
 ```
+
+Integrity repair reuses checksums for the exact tarball URL from repository lockfiles where possible. Otherwise it fetches npm metadata for the exact name/version and requires the metadata's tarball URL to match the lockfile. It downloads and verifies the tarball before adding a SHA-512 integrity field. URLs and redirects must stay on `https://registry.npmjs.org`; Git/local dependencies are left alone, other missing-integrity sources fail closed. No npm installs or package scripts run. Existing integrity fields and dependency versions are never rewritten. All fetches must succeed before any lockfile is written, and a second run is a no-op. Network access occurs only in the repair script, never during Nix evaluation. The builder's existing `knownIntegrities` remains a compatibility fallback for older unnormalized lockfiles; new missing fields no longer require adding version-specific entries there.
 
 The updater intentionally builds each selected dependency cache with a fake hash and extracts the actual fixed-output hash. These expected mismatch errors are captured; unrelated errors abort without partially changing the hash file. It also supports `--root /path/to/source` for isolated source snapshots. Root resources and all extension caches are supported; flakes and npm lockfiles are never rewritten by the updater.
 
