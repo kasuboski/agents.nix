@@ -43,8 +43,8 @@ let
     aperture = "sha256-KHcjO4KYML3wenUV99R+qQF6+YWRiyem106bHoYJM5w=";
     morphllm = "sha256-edi32j+rEdGjkH8J8qjKwXSADfFrQzbRE9xa8vqfb3Q=";
     status-tracker = "sha256-qiY0Xxe0huO1mePe+dXMhtXhEToyOBu4rlE270NMzjU=";
-    background-terminals = "sha256-NAhkYE2MHvC6IRqSJ5U1ajTumvYyb/ShtsaqbXMzOmI=";
-    telemetry = "sha256-8uRcZhw5fEkp7r+JeChKWWcMeR+hVtxjsu/+CkyX6cQ=";
+    background-terminals = "sha256-fa/rrmTA3Q9hPvxMp7JS9iLJb2nuLqdl90kk5Zri+z0=";
+    telemetry = "sha256-GOsqWKaKJyInXTVd7YXH8knKWWXXmvVMrx55dhvXKU0=";
   };
 
   # npm v7+ omits `integrity` for auto-installed peer deps of
