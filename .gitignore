@@ -4,6 +4,9 @@ STATUS.md
 # Nix build symlinks
 result*
 
+# Python tooling
+__pycache__/
+
 # Decrypted secrets (never commit)
 secrets/*.json
 !secrets/*.enc.json
