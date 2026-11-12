@@ -5,5 +5,24 @@
   ],
   "nix": {
     "enabled": true
-  }
+  },
+  "automerge": false,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": true,
+  "rebaseWhen": "behind-base-branch",
+  "gitIgnoredAuthors": ["41898282+github-actions[bot]@users.noreply.github.com"],
+  "packageRules": [
+    {
+      "description": "Automerge npm patch, pin, and digest updates after the required real build",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Keep grouped Node toolchain and Node types updates manual",
+      "matchPackageNames": ["node", "@types/node"],
+      "automerge": false
+    }
+  ]
 }
