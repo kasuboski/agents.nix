@@ -41,7 +41,7 @@ let
     tinyfish = "sha256-Vb/9Q825/y+KnOMeTK3EvIntEAzDgakq7LrKMaaJQ88="; # includes @tiny-fish/sdk
     agent = "sha256-fjAe6s8GXmVMwiKaKDeC8QOvpTemgw/RSkyOUlyZR+U=";
     aperture = "sha256-KHcjO4KYML3wenUV99R+qQF6+YWRiyem106bHoYJM5w=";
-    morphllm = "sha256-edi32j+rEdGjkH8J8qjKwXSADfFrQzbRE9xa8vqfb3Q=";
+    morphllm = "sha256-PvftG6SkAV62t5B+di2fbYRnvbQ872CU63eKvMJfpZU=";
     status-tracker = "sha256-qiY0Xxe0huO1mePe+dXMhtXhEToyOBu4rlE270NMzjU=";
     background-terminals = "sha256-NAhkYE2MHvC6IRqSJ5U1ajTumvYyb/ShtsaqbXMzOmI=";
     telemetry = "sha256-8uRcZhw5fEkp7r+JeChKWWcMeR+hVtxjsu/+CkyX6cQ=";
