@@ -166,6 +166,12 @@ let
 
 in
 {
-  inherit extensions skills themes;
+  # Exposed for scripts/update-npm-deps-hashes.py; not a public flake package.
+  inherit
+    extensions
+    skills
+    themes
+    packageResources
+    ;
 }
 # v2

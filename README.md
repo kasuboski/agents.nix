@@ -245,6 +245,23 @@ profiles = {
 
 5. Rebuild: `nix build .#pi-newprofile`
 
+### Automatic npm dependency hashes
+
+Same-repository Renovate PRs run `.github/workflows/renovate-npm-hashes.yml`. It refreshes hashes for changed extension/root npm lockfiles, using the actual Nix dependency derivations (including peer-integrity patches). It then runs formatting, a real `pi-ext` build, flake evaluation, and built-in/theme/skill regression tests. Only after validation succeeds does a separate job push a hash-only commit to the PR. Failed fetches or builds never get committed; concurrent branch updates are rejected rather than overwritten. Fork and non-Renovate PRs cannot use the write job.
+
+The build job has read-only permissions; only the separate push job has write access, and that job never executes PR scripts or dependency builds. No personal access token is needed. Repository Actions policy must allow `GITHUB_TOKEN` write permissions. Pushes using that token do not trigger another workflow run, so the action publishes a `pi-ext-build` commit status on the new validated commit; use that status for branch protection if desired. This validates packaging/resource loading, not every upstream API or live provider interaction, and does not auto-merge PRs.
+
+Once the workflow is on `main`, rebase existing Renovate PRs onto it to pick up the updater and trigger the workflow. Local use (Python 3 and Nix required):
+
+```bash
+python3 scripts/update-npm-deps-hashes.py                    # all npm caches
+python3 scripts/update-npm-deps-hashes.py --base origin/main # only changed lockfiles
+python3 tests/test-update-npm-deps-hashes.py
+nix build .#pi-ext --no-link --keep-going
+```
+
+The updater intentionally builds each selected dependency cache with a fake hash and extracts the actual fixed-output hash. These expected mismatch errors are captured; unrelated errors abort without partially changing the hash file. It also supports `--root /path/to/source` for isolated source snapshots. Root resources and all extension caches are supported; flakes and npm lockfiles are never rewritten by the updater.
+
 ### Update pinned inputs safely
 
 Update only the intended inputs:
