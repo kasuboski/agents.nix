@@ -38,10 +38,10 @@ let
   # NPM dependency hashes per extension.
   # Update by setting to lib.fakeHash, building, and copying the "got:" value.
   npmDepsHashes = {
-    tinyfish = "sha256-Vb/9Q825/y+KnOMeTK3EvIntEAzDgakq7LrKMaaJQ88="; # includes @tiny-fish/sdk
-    agent = "sha256-fjAe6s8GXmVMwiKaKDeC8QOvpTemgw/RSkyOUlyZR+U=";
-    aperture = "sha256-KHcjO4KYML3wenUV99R+qQF6+YWRiyem106bHoYJM5w=";
-    morphllm = "sha256-edi32j+rEdGjkH8J8qjKwXSADfFrQzbRE9xa8vqfb3Q=";
+    tinyfish = "sha256-8WaJFZumlW1dn+fUzUhJh2O1+zqgNkydNM2kUWvJrKc="; # includes @tiny-fish/sdk
+    agent = "sha256-W1xrhtcQOYQvb1YTHRmnNsZSBfcBgkzRplMkqoRWn+I=";
+    aperture = "sha256-rOwFLRkgDucnYxaOf9ieu+z8zAnPOSvc37gZ/fpWpcI=";
+    morphllm = "sha256-ouXVq618/6DjZ7g1ELFXplEksGu4QeKdyaCEoZf9F20=";
     status-tracker = "sha256-qiY0Xxe0huO1mePe+dXMhtXhEToyOBu4rlE270NMzjU=";
     background-terminals = "sha256-NAhkYE2MHvC6IRqSJ5U1ajTumvYyb/ShtsaqbXMzOmI=";
     telemetry = "sha256-8uRcZhw5fEkp7r+JeChKWWcMeR+hVtxjsu/+CkyX6cQ=";
