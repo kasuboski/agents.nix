@@ -559,7 +559,9 @@ export default async function apertureExtension(
 		// networked refresh for the aperture provider here. Failures fall back
 		// to the stored catalog. Note: PI_OFFLINE=1 disables networked refreshes
 		// entirely (pi constructs the model runtime with networking off).
-		void ctx.modelRegistry
+		// Hold session startup until discovery finishes: T3 snapshots the first
+		// get_available_models response and otherwise caches an empty provider.
+		return ctx.modelRegistry
 			.refresh({ providers: ["aperture"] })
 			.then((result) => {
 				if (activeSession !== session) return;
