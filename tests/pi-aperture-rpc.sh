@@ -62,13 +62,14 @@ process.off('unhandledRejection', onUnhandled);
 console.log('PASS late Aperture refresh errors never access a stale session context');
 let release;
 const gate = new Promise(resolve => { release = resolve; });
-let requested;
-const firstRequest = new Promise(resolve => { requested = resolve; });
-const server = createServer(async (_req, res) => {
-  requested();
-  await gate;
+let failDiscovery = false;
+const server = createServer(async (req, res) => {
+  if (failDiscovery) await gate;
+  else await new Promise(resolve => setTimeout(resolve, 100));
   res.writeHead(200, { 'content-type': 'application/json' });
-  res.end('{'); // Delayed discovery failure must not notify a stale context.
+  res.end(failDiscovery ? '{' : JSON.stringify(req.url === '/v1/models' ? {
+    data: [{ id: 'gpt-6.2-sol', owned_by: 'openai' }],
+  } : {}));
 });
 server.listen(0, '127.0.0.1');
 await once(server, 'listening');
@@ -113,7 +114,11 @@ const timeout = setTimeout(() => {
 }, 15000);
 try {
   await rpc('get_state');
-  await firstRequest;
+  const inventory = await rpc('get_available_models');
+  assert(inventory.data.models.some(model => model.provider === 'aperture' && model.id === 'gpt-6.2-sol'),
+    'T3 initial discovery must include Aperture models, without polling or a warmup delay');
+  console.log('PASS first RPC model inventory includes Aperture models');
+  failDiscovery = true;
   const sessionPath = `${process.env.PI_CODING_AGENT_DIR}/target.jsonl`;
   writeFileSync(sessionPath, JSON.stringify({ type: 'session', version: 3,
     id: randomUUID(), timestamp: new Date().toISOString(), cwd: process.cwd() }) + '\n');
