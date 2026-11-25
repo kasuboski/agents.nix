@@ -68,7 +68,13 @@ const server = createServer(async (req, res) => {
   else await new Promise(resolve => setTimeout(resolve, 100));
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(failDiscovery ? '{' : JSON.stringify(req.url === '/v1/models' ? {
-    data: [{ id: 'gpt-6.2-sol', owned_by: 'openai' }],
+    data: [
+      { id: 'gpt-6.2-sol', owned_by: 'openai' },
+      { id: 'gpt-6.2-astra', owned_by: 'openai' },
+      { id: 'glm-5.3', owned_by: 'zai' },
+      { id: 'glm-5.4', owned_by: 'zai' },
+      { id: 'unknown-test-model', owned_by: 'zai' },
+    ],
   } : {}));
 });
 server.listen(0, '127.0.0.1');
@@ -115,9 +121,28 @@ const timeout = setTimeout(() => {
 try {
   await rpc('get_state');
   const inventory = await rpc('get_available_models');
-  assert(inventory.data.models.some(model => model.provider === 'aperture' && model.id === 'gpt-6.2-sol'),
-    'T3 initial discovery must include Aperture models, without polling or a warmup delay');
-  console.log('PASS first RPC model inventory includes Aperture models');
+  const models = new Map(inventory.data.models.filter(model => model.provider === 'aperture')
+    .map(model => [model.id, model]));
+  const thinkingLevels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  for (const [id, expected] of [
+    ['gpt-6.2-sol', ['low', 'medium', 'high', 'xhigh', 'max']],
+    ['gpt-6.2-astra', ['low', 'medium', 'high', 'xhigh', 'max']],
+    ['glm-5.3', ['low', 'high', 'max']],
+    ['glm-5.4', ['low', 'high', 'max']],
+  ]) {
+    const model = models.get(id);
+    assert.equal(model?.reasoning, true, `first RPC inventory must describe reasoning for ${id}`);
+    // T3 uses null to hide a level and requires explicit opt-in for xhigh/max.
+    const map = model.thinkingLevelMap;
+    assert.deepEqual(thinkingLevels.filter(level =>
+      map?.[level] !== null && (!['xhigh', 'max'].includes(level) || map?.[level] !== undefined)), expected, id);
+  }
+  assert.equal(models.get('unknown-test-model')?.reasoning, false);
+  assert.equal(models.get('glm-5.4').compat?.thinkingFormat, 'zai');
+  await rpc('set_model', { provider: 'aperture', modelId: 'glm-5.4' });
+  await rpc('set_thinking_level', { level: 'high' });
+  assert.equal((await rpc('get_state')).data.thinkingLevel, 'high');
+  console.log('PASS first RPC inventory exposes supported thinking levels and Pi accepts GLM-5.4 high');
   failDiscovery = true;
   const sessionPath = `${process.env.PI_CODING_AGENT_DIR}/target.jsonl`;
   writeFileSync(sessionPath, JSON.stringify({ type: 'session', version: 3,
