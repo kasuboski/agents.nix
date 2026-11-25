@@ -286,6 +286,63 @@ type ApertureRoutedModel = Model<Api> & { upstreamApi?: Api };
 
 const TOKENS_PER_MILLION = 1_000_000;
 
+// Pig advertises model identities before they reach Pi's pinned catalog.
+// The registry takes precedence once it has an entry for the model.
+const GPT_6_2_REASONING: Partial<ProviderModelConfig> = {
+	reasoning: true,
+	thinkingLevelMap: {
+		off: null,
+		minimal: null,
+		low: "low",
+		medium: "medium",
+		high: "high",
+		xhigh: "xhigh",
+		max: "max",
+	},
+};
+
+const GLM_5_4_METADATA: Partial<ProviderModelConfig> = {
+	name: "GLM-5.4",
+	reasoning: true,
+	thinkingLevelMap: {
+		off: null,
+		minimal: null,
+		low: "low",
+		medium: null,
+		high: "high",
+		xhigh: null,
+		max: "max",
+	},
+	input: ["text", "image"],
+	contextWindow: 1_000_000,
+	maxTokens: 131_072,
+	compat: {
+		supportsStore: false,
+		supportsReasoningEffort: true,
+		maxTokensField: "max_tokens",
+		thinkingFormat: "zai",
+		supportsStrictMode: true,
+		zaiToolStream: true,
+	},
+};
+
+function fallbackMetadata(
+	providerId: string,
+	modelId: string,
+	api: Api,
+): Partial<ProviderModelConfig> | undefined {
+	if (providerId === "zai" && modelId === "glm-5.4" && api === "openai-completions") {
+		return GLM_5_4_METADATA;
+	}
+	if (
+		(providerId === "openai" || providerId === "openai-codex") &&
+		(modelId === "gpt-6.2-sol" || modelId === "gpt-6.2-astra") &&
+		(api === "openai-responses" || api === "openai-codex-responses")
+	) {
+		return GPT_6_2_REASONING;
+	}
+}
+
 function parsePrice(value: string | undefined): number | undefined {
 	if (value === undefined) return undefined;
 	const n = Number(value);
@@ -329,7 +386,9 @@ function buildModels(
 		for (const modelId of provider.models) {
 			if (seen.has(modelId)) continue;
 			seen.add(modelId);
-			const meta = registryMetadata(registryModels, provider.id, modelId);
+			const meta =
+				registryMetadata(registryModels, provider.id, modelId) ??
+				fallbackMetadata(provider.id, modelId, api);
 			const pricing = provider.pricingById[modelId];
 			const cost = meta?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 			models.push({
